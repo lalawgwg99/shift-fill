@@ -38,6 +38,20 @@ var TKEY='shift_admin_token';
 var token=sessionStorage.getItem(TKEY)||'';
 var cfg=null;
 
+function dDiff(a,b){
+  var da=new Date(+a.slice(0,4),+a.slice(5,7)-1,+a.slice(8,10));
+  var db=new Date(+b.slice(0,4),+b.slice(5,7)-1,+b.slice(8,10));
+  return Math.round((db-da)/86400000);
+}
+function lastDayOf(m){return new Date(+m.slice(0,4),+m.slice(5,7),0).getDate();}
+function maxGapDays(leaves,start,end){
+  var ds=leaves.filter(function(d){return d>=start&&d<=end;}).sort();
+  if(!ds.length)return dDiff(start,end);
+  var g=dDiff(start,ds[0]);
+  for(var i=0;i<ds.length-1;i++)g=Math.max(g,dDiff(ds[i],ds[i+1])-1);
+  g=Math.max(g,dDiff(ds[ds.length-1],end));
+  return g;
+}
 async function api(p,opt){
   var r=await fetch(p,opt);
   var j=null;try{j=await r.json();}catch(e){}
@@ -108,6 +122,7 @@ function renderForm(v){
     +'<input type="month" id="v_month" style="max-width:170px" value="'+schedMonth+'"/>'
     +'<button class="ghostbtn" id="v_reload" style="width:auto;margin-top:0;padding:10px 18px">重新整理</button>'
     +'</div>'
+    +'<div class="hint">每人「最長未休」超過 7 天會標紅（7 天內至少要有 1 天休假）。</div>'
     +'<div id="sched" style="margin-top:6px"><div class="hint">讀取中…</div></div>'
     +'</section>'
     +'<section><h2>休假規則</h2>'
@@ -167,11 +182,21 @@ function renderForm(v){
       var per={};
       subs.forEach(function(s){per[s.name]=(s.leave||[]).slice().sort();});
       var pn=Object.keys(per).sort();
+      var mFirst=m+'-01',mLast=m+'-'+String(lastDayOf(m)).padStart(2,'0');
+      var pStart=mFirst,pEnd=mLast;
+      if(cfg.openFrom&&cfg.openFrom>mFirst&&cfg.openFrom<=mLast)pStart=cfg.openFrom;
+      if(cfg.openTo&&cfg.openTo>=mFirst)pEnd=cfg.openTo;
+      if(pEnd<pStart){pStart=mFirst;pEnd=mLast;}
       if(pn.length){
         h+='<div class="hint" style="margin:12px 0 4px">每人小計</div>';
         pn.forEach(function(n){
           var ds=per[n].map(function(d){return parseInt(d.slice(5,7),10)+'/'+parseInt(d.slice(8,10),10);});
-          h+='<div style="font-size:13px;color:#555;padding:5px 2px;border-bottom:1px solid #f5f5f5">'+n+'：'+(ds.length?ds.join('、')+'（共'+ds.length+'天）':'未排')+'</div>';
+          var gap=maxGapDays(per[n],pStart,pEnd);
+          var warn=gap>7;
+          h+='<div style="font-size:13px;color:#555;padding:5px 2px;border-bottom:1px solid #f5f5f5">'+n+'：'
+            +(ds.length?ds.join('、')+'（共'+ds.length+'天）':'未排')
+            +'｜最長 <span style="font-weight:700;color:'+(warn?'#c0392b':'#0a7d2c')+'">'+gap+' 天未休</span>'
+            +(warn?' ⚠️':'')+'</div>';
         });
       }
       box.innerHTML=h;
