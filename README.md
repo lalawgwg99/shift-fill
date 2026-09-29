@@ -20,7 +20,8 @@
 3. 左側 D1 → Create database，取名 `shift-leave`。
 4. 回到 Pages 專案 → Settings → Bindings → D1 database → Add binding，
    Variable name 填 `DB`，選擇 `shift-leave` → Save（需要 Redeploy 才會生效）。
-5. D1 → `shift-leave` → Console，把 `migrations/0001_schema.sql` 的內容貼上執行。
+5. 資料表會由 API 第一次被呼叫時自動建立（`ensureSchema`，內容同 `migrations/0001_schema.sql`），
+   不需手動執行；若想手動建，也可到 D1 → `shift-leave` → Console 貼上該檔案內容執行。
 6. （選填）Pages → Settings → Environment variables：
    - `MAX_LEAVE`：每天最多休假人數，預設 4
    - `SYNC_TOKEN`：設定後，`/api/export` 需要 `?token=` 相符才能讀取

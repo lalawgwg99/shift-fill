@@ -6,6 +6,24 @@ function maxLeave(env) {
   return parseInt(env.MAX_LEAVE || '4', 10);
 }
 
+// 資料表自動建置：第一次被呼叫時若表不存在就自己建好，
+// 就算 Cloudflare 那邊沒手動跑過 migration 也能正常運作。
+const SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS submissions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    month TEXT NOT NULL,
+    leave_dates TEXT NOT NULL DEFAULT '[]',
+    prefs TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(name, month)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_submissions_month ON submissions(month)`
+];
+async function ensureSchema(env) {
+  for (const sql of SCHEMA) await env.DB.prepare(sql).run();
+}
+
 // POST /api/submit { name, month, leave: ["YYYY-MM-DD", ...] }
 // Enforces the daily leave cap (excluding the submitter's own previous picks
 // and exempt staff). Returns { ok, accepted, rejected, maxLeave }.
@@ -15,6 +33,8 @@ export async function onRequestPost({ request, env }) {
   const { name, month } = body;
   if (!STAFF_OK.includes(name)) return Response.json({ error: 'bad name' }, { status: 400 });
   if (!/^\d{4}-\d{2}$/.test(month || '')) return Response.json({ error: 'bad month' }, { status: 400 });
+  if (!env.DB) return Response.json({ error: 'db_not_bound' }, { status: 500 });
+  await ensureSchema(env);
   const cap = maxLeave(env);
   const raw = Array.isArray(body.leave) ? body.leave : [];
   const picked = raw.filter(isValidDate);
