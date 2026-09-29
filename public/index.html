@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>休假意願調查</title>
+<title>排假系統</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC",sans-serif;background:#f4f5f7;color:#222;padding-bottom:96px}
@@ -57,7 +57,7 @@ input[type=password].pin{width:100%;border:1.5px solid #ddd;border-radius:10px;p
 </style>
 </head>
 <body>
-<header><h1 id="title">休假意願調查</h1><a href="admin.html" class="gear" title="排班設定">⚙️</a></header>
+<header><h1 id="title">排假系統</h1><a href="admin.html" class="gear" title="排班設定">⚙️</a></header>
 <div class="msw"><button id="pm">‹</button><b id="mlab"></b><button id="nm">›</button></div>
 <div id="view"></div>
 <div class="bar" id="bar"><button id="go" disabled>確定送出</button></div>
@@ -91,7 +91,7 @@ function capOf(ds){var n=stats.caps&&stats.caps[ds];return (n>=1)?n:stats.maxLea
 function isFull(ds){if(EXEMPT.indexOf(me)>=0)return false;return others(ds)>=capOf(ds)&&!mine.has(ds);}
 
 function render(){
-  document.getElementById('title').textContent=ml()+' 休假意願調查';
+  document.getElementById('title').textContent=ml()+' 排假系統';
   document.getElementById('mlab').textContent=ml();
   var v=document.getElementById('view'),bar=document.getElementById('bar');
   if(!me){renderNames(v);bar.innerHTML='<button id="go" disabled>請先選名字</button>';stopPoll();return;}
