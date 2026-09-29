@@ -100,8 +100,8 @@ function render(){
   if(done){renderDone(v);bar.innerHTML='<button id="go2" class="ghost" style="width:100%;padding:14px;border-radius:12px;background:#fff;color:#06C755;border:1.5px solid #06C755;font-size:17px;font-weight:700;cursor:pointer">修改我的休假</button>';document.getElementById('go2').onclick=function(){done=false;render();};stopPoll();return;}
   renderCal(v);
   function fmtD(ds){return parseInt(ds.slice(5,7),10)+'/'+parseInt(ds.slice(8),10);}
-  var on=OPENFROM&&OPENTO?('，'+fmtD(OPENFROM)+'–'+fmtD(OPENTO)+' 開放選擇'):OPENFROM?('，'+fmtD(OPENFROM)+' 起開放選擇'):OPENTO?('，開放至 '+fmtD(OPENTO)):'';
-  bar.innerHTML='<button id="go">確定送出（已選 '+mine.size+' 天）</button><div class="hint" style="text-align:center">每日上限 '+stats.maxLeave+' 人（部分日期較少），每週每人上限 '+WEEKLY+' 天'+on+'</div>';
+  var on=OPENFROM&&OPENTO?('，'+fmtD(OPENFROM)+'–'+fmtD(OPENTO)+'開放選擇'):OPENFROM?('，'+fmtD(OPENFROM)+'起開放選擇'):OPENTO?('，開放至'+fmtD(OPENTO)):'';
+  bar.innerHTML='<button id="go">確定送出（已選 '+mine.size+' 天）</button><div class="hint" style="text-align:center;white-space:nowrap;font-size:11px">每日上限'+stats.maxLeave+'人（部分日期較少），每週每人上限'+WEEKLY+'天'+on+'</div>';
   document.getElementById('go').onclick=submit;
   startPoll();
 }
