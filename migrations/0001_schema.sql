@@ -8,3 +8,7 @@ CREATE TABLE IF NOT EXISTS submissions (
   UNIQUE(name, month)
 );
 CREATE INDEX IF NOT EXISTS idx_submissions_month ON submissions(month);
+CREATE TABLE IF NOT EXISTS config (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);

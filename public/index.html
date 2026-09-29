@@ -7,8 +7,9 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC",sans-serif;background:#f4f5f7;color:#222;padding-bottom:96px}
-header{background:#06C755;color:#fff;padding:14px 16px;position:sticky;top:0;z-index:10}
+header{background:#06C755;color:#fff;padding:14px 16px;position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center}
 header h1{font-size:18px}
+.gear{color:#fff;font-size:20px;text-decoration:none;padding:4px}
 .msw{display:flex;align-items:center;justify-content:center;gap:18px;margin:12px 0}
 .msw button{border:1px solid #ddd;background:#fff;border-radius:8px;padding:6px 14px;font-size:16px;cursor:pointer}
 .msw b{font-size:18px}
@@ -44,13 +45,18 @@ h2{font-size:15px;margin-bottom:10px}
 </style>
 </head>
 <body>
-<header><h1 id="title">休假意願調查</h1></header>
+<header><h1 id="title">休假意願調查</h1><a href="admin.html" class="gear" title="排班設定">⚙️</a></header>
 <div class="msw"><button id="pm">‹</button><b id="mlab"></b><button id="nm">›</button></div>
 <div id="view"></div>
 <div class="bar" id="bar"><button id="go" disabled>確定送出</button></div>
 <script>
 var STAFF=['榮德','耀南','淑玲','泰霖','蓬逸','建發','敏誠','瑜芳','宜萱','俊霖'];
 var EXEMPT=['榮德','俊霖'];
+var WEEKLY=2;
+function weekKey(ds){var p=ds.split('-');var dt=new Date(Date.UTC(+p[0],+p[1]-1,+p[2]));dt.setUTCDate(dt.getUTCDate()-((dt.getUTCDay()+6)%7));return dt.toISOString().slice(0,10);}
+function exemptNote(){return EXEMPT.length?'（'+EXEMPT.join('、')+'不佔名額）':'';}
+function weekCount(ds){var w=weekKey(ds),c=0;mine.forEach(function(x){if(weekKey(x)===w)c++;});return c;}
+function dayName(a){return a.map(function(ds){return parseInt(ds.slice(8),10)+'號';}).join('、');}
 var WD=['日','一','二','三','四','五','六'];
 function nextMonth(){var d=new Date();d.setMonth(d.getMonth()+1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
 var month=nextMonth(), me=null, mine=new Set(), serverMine=new Set(), stats={days:{},maxLeave:4}, done=false, poll=null;
@@ -74,7 +80,7 @@ function render(){
   if(!me){renderNames(v);bar.innerHTML='<button id="go" disabled>請先選名字</button>';stopPoll();return;}
   if(done){renderDone(v);bar.innerHTML='<button id="go2" class="ghost" style="width:100%;padding:14px;border-radius:12px;background:#fff;color:#06C755;border:1.5px solid #06C755;font-size:17px;font-weight:700;cursor:pointer">修改我的休假</button>';document.getElementById('go2').onclick=function(){done=false;render();};stopPoll();return;}
   renderCal(v);
-  bar.innerHTML='<button id="go">確定送出（已選 '+mine.size+' 天）</button><div class="hint" style="text-align:center">每天最多 '+stats.maxLeave+' 人休假（榮德、俊霖不佔名額），滿了的日期不能選</div>';
+  bar.innerHTML='<button id="go">確定送出（已選 '+mine.size+' 天）</button><div class="hint" style="text-align:center">每天最多 '+stats.maxLeave+' 人休假'+exemptNote()+'，每週每人最多先排 '+WEEKLY+' 天，滿了的日期不能選</div>';
   document.getElementById('go').onclick=submit;
   startPoll();
 }
@@ -82,7 +88,7 @@ function renderNames(v){
   var h='<section><h2>我是誰？（點自己的名字）</h2><div class="names">';
   STAFF.forEach(function(n){h+='<button data-n="'+n+'">'+n+'</button>';});
   h+='</div></section>';
-  h+='<section><div class="hint">點名字 → 點日期選休假 → 確定送出。<br>每天最多 '+stats.maxLeave+' 人休假（榮德、俊霖不佔名額），人數即時顯示，滿了就不能選。</div></section>';
+  h+='<section><div class="hint">點名字 → 點日期選休假 → 確定送出。<br>每天最多 '+stats.maxLeave+' 人休假'+exemptNote()+'，每週每人最多先排 '+WEEKLY+' 天，人數即時顯示，滿了就不能選。</div></section>';
   v.innerHTML=h;
   v.querySelectorAll('.names button').forEach(function(b){b.onclick=async function(){me=b.getAttribute('data-n');await fetchMine();done=false;render();};});
 }
@@ -101,13 +107,21 @@ function renderCal(){
     else if(isFull(ds)){h+='<div class="day full'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">已滿'+stats.maxLeave+'人</span></div>';}
     else{h+='<div class="day'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">'+c+'/'+stats.maxLeave+'</span></div>';}
   }
-  h+='</div><div class="hint">綠色是你的休假；灰色「已滿」是當天休假已達 '+stats.maxLeave+' 人（不含榮德、俊霖），不能再選。</div><div class="err" id="err"></div></section>';
+  h+='</div><div class="hint">綠色是你的休假；灰色「已滿」是當天休假已達 '+stats.maxLeave+' 人'+(EXEMPT.length?'（不含'+EXEMPT.join('、')+'）':'')+'，不能再選。</div><div class="err" id="err"></div></section>';
   v.innerHTML=h;
   v.querySelectorAll('.day[data-ds]').forEach(function(el){
     el.onclick=function(){
       var ds=el.getAttribute('data-ds');
       if(el.classList.contains('full'))return;
-      if(mine.has(ds))mine.delete(ds);else mine.add(ds);
+      if(mine.has(ds)){mine.delete(ds);}
+      else{
+        if(weekCount(ds)>=WEEKLY){
+          var e=document.getElementById('err');
+          if(e)e.textContent='每週最多先排 '+WEEKLY+' 天，這一週已經選滿了，請改選別週的日期';
+          return;
+        }
+        mine.add(ds);
+      }
       renderCal();
       var go=document.getElementById('go');if(go)go.textContent='確定送出（已選 '+mine.size+' 天）';
     };
@@ -124,10 +138,18 @@ async function submit(){
   var go=document.getElementById('go');go.disabled=true;go.textContent='送出中…';
   try{
     var r=await api('/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:me,month:month,leave:[...mine]})});
+    var msg='';
     if(r.rejected&&r.rejected.length){
       r.rejected.forEach(function(ds){mine.delete(ds);});
+      msg+='以下日期剛被別人選滿（'+r.maxLeave+'人），請改選其他日期：'+dayName(r.rejected)+'。';
+    }
+    if(r.rejectedWeekly&&r.rejectedWeekly.length){
+      r.rejectedWeekly.forEach(function(ds){mine.delete(ds);});
+      msg+='每週最多先排 '+(r.weeklyCap||WEEKLY)+' 天，以下日期超過上限被退回：'+dayName(r.rejectedWeekly)+'。';
+    }
+    if(msg){
       renderCal();
-      document.getElementById('err').textContent='以下日期剛被別人選滿（'+r.maxLeave+'人），請改選其他日期：'+r.rejected.map(function(ds){return parseInt(ds.slice(8),10)+'號';}).join('、');
+      document.getElementById('err').textContent=msg;
       var go2=document.getElementById('go');if(go2){go2.disabled=false;go2.textContent='確定送出（已選 '+mine.size+' 天）';go2.onclick=submit;}
       await fetchStats();await fetchMine();return;
     }
@@ -136,7 +158,16 @@ async function submit(){
 }
 function startPoll(){stopPoll();poll=setInterval(fetchStats,5000);}
 function stopPoll(){if(poll){clearInterval(poll);poll=null;}}
-render();fetchStats();
+async function boot(){
+  try{
+    var c=await api('/api/config');
+    if(c.staff&&c.staff.length)STAFF=c.staff;
+    if(c.exempt)EXEMPT=c.exempt;
+    if(c.weeklyCap)WEEKLY=c.weeklyCap;
+  }catch(e){}
+  render();fetchStats();
+}
+boot();
 </script>
 </body>
 </html>

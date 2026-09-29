@@ -1,23 +1,7 @@
 // GET /api/export?month=YYYY-MM[&token=...] -> all submissions for the month.
 // Used by the manager's scheduling app to pull everyone's picks.
 // If the SYNC_TOKEN env var is set, the matching ?token= is required.
-// 資料表自動建置：第一次被呼叫時若表不存在就自己建好，
-// 就算 Cloudflare 那邊沒手動跑過 migration 也能正常運作。
-const SCHEMA = [
-  `CREATE TABLE IF NOT EXISTS submissions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    month TEXT NOT NULL,
-    leave_dates TEXT NOT NULL DEFAULT '[]',
-    prefs TEXT NOT NULL DEFAULT '{}',
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(name, month)
-  )`,
-  `CREATE INDEX IF NOT EXISTS idx_submissions_month ON submissions(month)`
-];
-async function ensureSchema(env) {
-  for (const sql of SCHEMA) await env.DB.prepare(sql).run();
-}
+import { ensureSchema } from './config.js';
 
 export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);

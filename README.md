@@ -7,9 +7,12 @@
 - API：`functions/api/`（Cloudflare Pages Functions + D1）
   - `GET /api/stats?month=YYYY-MM`：每天休假人數與名單
   - `GET /api/mine?name=XX&month=YYYY-MM`：某人已送出的休假
-  - `POST /api/submit`：送出／更新休假（伺服器端檢查每天上限，超過的日期會被退回）
+  - `POST /api/submit`：送出／更新休假（伺服器端檢查每天上限與每週上限，超過的日期會被退回）
   - `GET /api/export?month=YYYY-MM`：匯出全月資料（給排班 App 同步用）
-- 資料庫：`migrations/0001_schema.sql`
+  - `GET /api/config`：目前設定（上限、每週天數、名單、豁免）
+  - `POST /api/config`：修改設定（需管理密碼）
+- 排班設定頁：`public/admin.html`（手機可開，設管理密碼後可調：每天上限、每週每人天數、員工名單、不佔名額人員）
+- 資料庫：`migrations/0001_schema.sql`（API 首次被呼叫會自動建表，也可手動跑）
 
 ## 上線步驟（Cloudflare，跟 musegogo 一樣）
 
@@ -28,3 +31,16 @@
 
 完成後把 `https://shift-fill.pages.dev`（或自訂網域）傳到群組給大家填。
 月份預設是下個月，可左右切換。
+
+## 管理設定（排班的人用）
+
+用手機開 `https://shift-fill.pages.dev/admin.html`（填寫頁右上角也有 ⚙️ 可進）：
+第一次會請你設一組管理密碼，之後修改都要輸入密碼。
+
+可調項目：
+- 每天最多休假人數（預設 4）
+- 每週每人最多先排天數（預設 2；之後想開放更多天直接調大）
+- 員工名單（一人一行）
+- 不佔每日名額的人員（預設：榮德、俊霖）
+
+設定存在資料庫，改完立刻生效，不用重新部署。
