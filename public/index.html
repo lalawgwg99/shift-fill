@@ -45,6 +45,11 @@ h2{font-size:15px;margin-bottom:10px}
 .ok p{margin:10px 0;font-size:15px}
 .tag{display:inline-block;background:#e8f9ee;color:#0a7d2c;border-radius:6px;padding:3px 10px;font-size:13px;margin:3px;font-weight:700}
 .err{color:#e5484d;font-size:13px;margin-top:8px;font-weight:700}
+.bigbtn{width:100%;padding:14px;border:none;border-radius:12px;background:#06C755;color:#fff;font-size:17px;font-weight:700;cursor:pointer;margin-top:16px}
+.bigbtn:disabled{background:#ccc}
+.ghostbtn{width:100%;padding:12px;border-radius:12px;background:#fff;color:#666;border:1.5px solid #ddd;font-size:15px;cursor:pointer;margin-top:10px}
+.pinlabel{display:block;font-size:14px;font-weight:700;margin:14px 0 6px}
+input[type=password].pin{width:100%;border:1.5px solid #ddd;border-radius:10px;padding:12px;font-size:22px;letter-spacing:10px;text-align:center;font-family:inherit}
 </style>
 </head>
 <body>
@@ -70,7 +75,8 @@ function shiftMonth(k){var p=month.split('-'),y=+p[0],m=+p[1]+k;if(m<1){m=12;y--
 document.getElementById('pm').onclick=function(){shiftMonth(-1);};
 document.getElementById('nm').onclick=function(){shiftMonth(1);};
 
-async function api(p,opt){var r=await fetch(p,opt);if(!r.ok)throw new Error('net');return r.json();}
+async function api(p,opt){var r=await fetch(p,opt);if(!r.ok){var e=new Error('net');e.status=r.status;try{e.body=await r.json();}catch(_){e.body=null;}throw e;}return r.json();}
+function savedPin(n){return sessionStorage.getItem('shift_pin_'+n)||'';}
 async function fetchStats(){try{stats=await api('/api/stats?month='+month);if(me&&!done)renderCal();}catch(e){}}
 async function fetchMine(){try{var r=await api('/api/mine?name='+encodeURIComponent(me)+'&month='+month);serverMine=new Set(r.leave||[]);mine=new Set(serverMine);}catch(e){serverMine=new Set();mine=new Set();}}
 
@@ -93,15 +99,64 @@ function renderNames(v){
   var h='<section><h2>我是誰？（點自己的名字）</h2><div class="names">';
   STAFF.forEach(function(n){h+='<button data-n="'+n+'">'+n+'</button>';});
   h+='</div></section>';
-  h+='<section><div class="hint">點名字 → 點日期選休假 → 確定送出。<br>每天最多 '+stats.maxLeave+' 人休假'+exemptNote()+'，每週每人最多先排 '+WEEKLY+' 天，人數即時顯示，滿了就不能選。</div></section>';
+  h+='<section><div class="hint">點名字 → 點日期選休假 → 確定送出。<br>第一次點名字要設 4 位數密碼，之後每次都要輸入，別人不能冒用你的名字亂排。<br>每天最多 '+stats.maxLeave+' 人休假'+exemptNote()+'，每週每人最多先排 '+WEEKLY+' 天，人數即時顯示，滿了就不能選。</div></section>';
   v.innerHTML=h;
-  v.querySelectorAll('.names button').forEach(function(b){b.onclick=async function(){me=b.getAttribute('data-n');await fetchMine();done=false;render();};});
+  v.querySelectorAll('.names button').forEach(function(b){b.onclick=function(){pickName(b.getAttribute('data-n'));};});
+}
+
+// 選名字後先過 4 位數密碼：沒設過→設定；設過→驗證（記住在這台裝置）
+async function pickName(n){
+  me=n;done=false;
+  var hasPin=false;
+  try{var st=await api('/api/pin?name='+encodeURIComponent(n));hasPin=!!(st&&st.hasPin);}catch(e){renderPin(n,false,'連線失敗，請檢查網路後重試');return;}
+  var sp=savedPin(n);
+  if(hasPin&&sp){
+    try{var v=await api('/api/pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n,pin:sp})});}
+    catch(e){v=null;}
+    if(v&&v.ok){await fetchMine();render();fetchStats();return;}
+    sessionStorage.removeItem('shift_pin_'+n);
+  }
+  renderPin(n,hasPin);
+}
+function renderPin(n,hasPin,msg){
+  var v=document.getElementById('view');
+  var h='<section><h2>'+n+'，你好</h2>';
+  if(hasPin){
+    h+='<div class="hint">請輸入你的 4 位數密碼（避免別人冒用你的名字亂排）。</div><label class="pinlabel">4 位數密碼</label>';
+  }else{
+    h+='<div class="hint">第一次使用，請設定一組 4 位數密碼。之後每次進來都要輸入，別人就不能冒用你的名字亂排了。</div><label class="pinlabel">設定 4 位數密碼</label>';
+  }
+  h+='<input type="password" class="pin" id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••"/>';
+  h+='<div class="err" id="msg">'+(msg||'')+'</div>';
+  h+='<button class="bigbtn" id="pinok">'+(hasPin?'確認':'設定並繼續')+'</button>';
+  h+='<button class="ghostbtn" id="pinback">← 換名字</button></section>';
+  v.innerHTML=h;
+  document.getElementById('pinback').onclick=function(){me=null;render();};
+  var go=async function(){
+    var p=document.getElementById('pin').value.trim();
+    var m=document.getElementById('msg');
+    if(!/^\d{4}$/.test(p)){m.textContent='請輸入 4 位數字';return;}
+    m.textContent='';
+    var btn=document.getElementById('pinok');btn.disabled=true;btn.textContent='確認中…';
+    try{
+      var r=await api('/api/pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(hasPin?{name:n,pin:p}:{name:n,newPin:p})});
+      if(r&&r.ok){sessionStorage.setItem('shift_pin_'+n,p);await fetchMine();render();fetchStats();return;}
+      m.textContent='失敗，請重試';
+    }catch(e){
+      var code=e&&e.body&&e.body.error;
+      m.textContent=code==='locked'?'嘗試太多次，請 10 分鐘後再試':(e&&e.status===403?'密碼錯誤，請重試':'連線失敗，請檢查網路後重試');
+    }
+    btn.disabled=false;btn.textContent=hasPin?'確認':'設定並繼續';
+  };
+  document.getElementById('pinok').onclick=go;
+  document.getElementById('pin').onkeydown=function(e){if(e.key==='Enter')go();};
+  setTimeout(function(){var i=document.getElementById('pin');if(i)i.focus();},100);
 }
 function renderCal(){
   var v=document.getElementById('view');
   var p=month.split('-'),y=+p[0],m=+p[1];
   var first=new Date(y,m-1,1).getDay(),dim=new Date(y,m,0).getDate();
-  var h='<section><h2>'+me+'，點日期選休假'+(EXEMPT.indexOf(me)>=0?'（排班人員不受名額限制）':'（再點一次取消）')+'</h2><div class="cal">';
+  var h='<section><h2 style="display:flex;justify-content:space-between;align-items:center"><span>'+me+'，點日期選休假'+(EXEMPT.indexOf(me)>=0?'（排班人員不受名額限制）':'（再點一次取消）')+'</span><button id="switchuser" style="border:1.5px solid #ddd;background:#fff;border-radius:20px;padding:6px 14px;font-size:13px;color:#666;cursor:pointer;white-space:nowrap">換人</button></h2><div class="cal">';
   WD.forEach(function(w,i){h+='<div class="dow'+(i===0?' sun':'')+(i===6?' sat':'')+'">'+w+'</div>';});
   for(var i=0;i<first;i++)h+='<div class="day blank"></div>';
   for(var d=1;d<=dim;d++){
@@ -115,6 +170,7 @@ function renderCal(){
   }
   h+='</div><div class="hint">綠色是你的休假；灰色「已滿」是當天休假已達 '+stats.maxLeave+' 人'+(EXEMPT.length?'（不含'+EXEMPT.join('、')+'）':'')+'，不能再選。</div><div class="err" id="err"></div></section>';
   v.innerHTML=h;
+  var su=document.getElementById('switchuser');if(su)su.onclick=function(){me=null;done=false;render();};
   v.querySelectorAll('.day[data-ds]').forEach(function(el){
     el.onclick=function(){
       var ds=el.getAttribute('data-ds');
@@ -143,7 +199,7 @@ function renderDone(v){
 async function submit(){
   var go=document.getElementById('go');go.disabled=true;go.textContent='送出中…';
   try{
-    var r=await api('/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:me,month:month,leave:[...mine]})});
+    var r=await api('/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:me,month:month,leave:[...mine],pin:savedPin(me)})});
     var msg='';
     if(r.rejected&&r.rejected.length){
       r.rejected.forEach(function(ds){mine.delete(ds);});
@@ -164,7 +220,16 @@ async function submit(){
       await fetchStats();await fetchMine();return;
     }
     serverMine=new Set([...mine]);done=true;render();fetchStats();
-  }catch(e){go.disabled=false;go.textContent='確定送出（已選 '+mine.size+' 天）';alert('送出失敗，請檢查網路後再試');}
+  }catch(e){
+    if(e&&e.status===403){
+      var code=e.body&&e.body.error;
+      if(code==='locked'){alert('嘗試太多次，請 10 分鐘後再試');go.disabled=false;go.textContent='確定送出（已選 '+mine.size+' 天）';return;}
+      sessionStorage.removeItem('shift_pin_'+me);
+      if(code==='pin_required'){renderPin(me,false,'請先設定 4 位數密碼');return;}
+      renderPin(me,true,'密碼不正確或已失效，請重新輸入');return;
+    }
+    go.disabled=false;go.textContent='確定送出（已選 '+mine.size+' 天）';alert('送出失敗，請檢查網路後再試');
+  }
 }
 function startPoll(){stopPoll();poll=setInterval(fetchStats,5000);}
 function stopPoll(){if(poll){clearInterval(poll);poll=null;}}

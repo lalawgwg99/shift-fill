@@ -12,3 +12,13 @@ CREATE TABLE IF NOT EXISTS config (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS pins (
+  name TEXT PRIMARY KEY,
+  pin_hash TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS pin_fails (
+  name TEXT PRIMARY KEY,
+  fails INTEGER NOT NULL DEFAULT 0,
+  last_fail TEXT NOT NULL DEFAULT (datetime('now'))
+);

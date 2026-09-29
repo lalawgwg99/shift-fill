@@ -23,7 +23,9 @@ const SCHEMA = [
     UNIQUE(name, month)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_submissions_month ON submissions(month)`,
-  `CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL)`
+  `CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS pins (name TEXT PRIMARY KEY, pin_hash TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  `CREATE TABLE IF NOT EXISTS pin_fails (name TEXT PRIMARY KEY, fails INTEGER NOT NULL DEFAULT 0, last_fail TEXT NOT NULL DEFAULT (datetime('now')))`
 ];
 
 // 資料表自動建置：第一次被呼叫時若表不存在就自己建好，
@@ -78,6 +80,11 @@ export async function getConfig(env) {
   return cfg;
 }
 
+async function sha256hex(s) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('shift-fill-admin:' + s));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 export async function getAdminToken(env) {
   try {
     const row = await env.DB.prepare("SELECT value FROM config WHERE key = 'adminToken'").first();
@@ -116,13 +123,13 @@ export async function onRequestPost({ request, env }) {
   if (!cur) {
     const nt = String(body.newToken || '');
     if (nt.length < 4) return Response.json({ error: 'setup_required' }, { status: 403 });
-    await setConfigValue(env, 'adminToken', nt);
+    await setConfigValue(env, 'adminToken', await sha256hex(nt));
   } else {
-    if (body.token !== cur) return Response.json({ error: 'forbidden' }, { status: 403 });
+    if (await sha256hex(String(body.token || '')) !== cur) return Response.json({ error: 'forbidden' }, { status: 403 });
     if (body.newToken !== undefined) {
       const nt = String(body.newToken || '');
       if (nt.length < 4) return Response.json({ error: 'weak_token' }, { status: 400 });
-      await setConfigValue(env, 'adminToken', nt);
+      await setConfigValue(env, 'adminToken', await sha256hex(nt));
     }
   }
   if (body.maxLeave !== undefined) {
@@ -151,6 +158,15 @@ export async function onRequestPost({ request, env }) {
     const ex = parseNameList(body.exempt).filter(n => base.includes(n));
     await setConfigValue(env, 'exempt', JSON.stringify(ex));
   }
+  if (body.resetPin !== undefined) {
+    const base = staff || (await getConfig(env)).staff;
+    const n = String(body.resetPin || '').trim();
+    if (!base.includes(n)) return Response.json({ error: 'bad name' }, { status: 400 });
+    await env.DB.prepare('DELETE FROM pins WHERE name = ?').bind(n).run();
+    await env.DB.prepare('DELETE FROM pin_fails WHERE name = ?').bind(n).run();
+  }
   const cfg = await getConfig(env);
-  return Response.json({ ok: true, ...publicConfig(cfg, true) });
+  const pinRows = await env.DB.prepare('SELECT name FROM pins').all();
+  const pinSet = (pinRows.results || []).map(r => r.name);
+  return Response.json({ ok: true, ...publicConfig(cfg, true), pinSet });
 }

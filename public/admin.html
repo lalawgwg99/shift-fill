@@ -116,6 +116,8 @@ function renderForm(v){
     +'<textarea id="f_staff">'+esc(staffTxt)+'</textarea>'
     +'<label>不佔每日名額的人員 <small>（打勾；通常是排班人員）</small></label>'
     +'<div class="exlist" id="exlist"></div>'
+    +'<label>個人密碼管理 <small>（有人忘記 4 位數密碼時幫他重設；重設後他下次進來要重新設定一組）</small></label>'
+    +'<div id="pinlist"><div class="hint">讀取中…</div></div>'
     +'</section>'
     +'<section><h2>管理密碼</h2>'
     +'<label>更換密碼 <small>（不換就留空）</small></label>'
@@ -142,8 +144,34 @@ function renderForm(v){
       box.appendChild(lab);
     });
   };
-  document.getElementById('f_staff').oninput=buildEx;
-  buildEx();
+  var buildPinList=function(){
+    var box=document.getElementById('pinlist');if(!box)return;box.innerHTML='';
+    var names=document.getElementById('f_staff').value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+    var set={};(cfg.pinSet||[]).forEach(function(n){set[n]=1;});
+    if(!names.length){box.innerHTML='<div class="hint">尚無員工名單</div>';return;}
+    names.forEach(function(n){
+      var row=document.createElement('div');
+      row.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:9px 2px;border-bottom:1px solid #f0f0f0;font-size:14px';
+      var left=document.createElement('span');left.textContent=n;row.appendChild(left);
+      var right=document.createElement('span');
+      if(set[n]){
+        right.innerHTML='<span style="color:#0a7d2c;font-size:13px;margin-right:8px">已設定</span>';
+        var btn=document.createElement('button');btn.textContent='重設';
+        btn.style.cssText='padding:6px 14px;border-radius:20px;background:#fff;color:#666;border:1.5px solid #ddd;font-size:13px;cursor:pointer';
+        btn.onclick=function(){resetPin(n);};
+        right.appendChild(btn);
+      }else{right.innerHTML='<span style="color:#aaa;font-size:13px">未設定</span>';}
+      row.appendChild(right);box.appendChild(row);
+    });
+  };
+  var resetPin=async function(n){
+    if(!confirm('確定要重設「'+n+'」的 4 位數密碼嗎？\n他下次進來要重新設定一組。'))return;
+    var r=await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token,resetPin:n})});
+    if(r.status===200&&r.body){cfg=r.body;buildPinList();}
+    else{alert('重設失敗，請重試');}
+  };
+  document.getElementById('f_staff').oninput=function(){buildEx();buildPinList();};
+  buildEx();buildPinList();
   document.getElementById('logout').onclick=function(){
     token='';sessionStorage.removeItem(TKEY);render();
   };
@@ -173,7 +201,7 @@ function renderForm(v){
     }
     if(r.status!==200||!r.body||!r.body.ok){m.textContent='儲存失敗：'+((r.body&&r.body.error)||('HTTP '+r.status));return;}
     if(newpw){token=newpw;sessionStorage.setItem(TKEY,token);}
-    cfg=r.body;okm.textContent='已儲存 ✓';document.getElementById('f_newpw').value='';
+    cfg=r.body;okm.textContent='已儲存 ✓';document.getElementById('f_newpw').value='';buildPinList();
     window.scrollTo(0,document.body.scrollHeight);
   };
 }

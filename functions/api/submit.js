@@ -1,4 +1,5 @@
 import { ensureSchema, getConfig } from './config.js';
+import { checkPin } from './pin.js';
 
 // 該日期所在週（週一起算）的 key：同屬一週的日期 key 相同
 function weekKey(ds) {
@@ -6,6 +7,14 @@ function weekKey(ds) {
   const dt = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
   dt.setUTCDate(dt.getUTCDate() - ((dt.getUTCDay() + 6) % 7));
   return dt.toISOString().slice(0, 10);
+}
+
+function addMonths(month, k) {
+  const p = month.split('-').map(Number);
+  let y = p[0], m = p[1] + k;
+  while (m < 1) { m += 12; y--; }
+  while (m > 12) { m -= 12; y++; }
+  return y + '-' + String(m).padStart(2, '0');
 }
 
 // POST /api/submit { name, month, leave: ["YYYY-MM-DD", ...] }
@@ -20,6 +29,9 @@ export async function onRequestPost({ request, env }) {
   const cfg = await getConfig(env);
   if (!cfg.staff.includes(name)) return Response.json({ error: 'bad name' }, { status: 400 });
   if (!/^\d{4}-\d{2}$/.test(month || '')) return Response.json({ error: 'bad month' }, { status: 400 });
+  // 個人 4 位數密碼驗證
+  const chk = await checkPin(env, name, body.pin);
+  if (chk !== 'ok') return Response.json({ error: chk }, { status: 403 });
   const cap = cfg.maxLeave;
   const raw = Array.isArray(body.leave) ? body.leave : [];
   const picked = raw.filter(isValidDate);
@@ -33,23 +45,29 @@ export async function onRequestPost({ request, env }) {
     return typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && d.startsWith(month);
   }
 
+  // 讀本月＋前後月：每天上限只看本月；每週上限要含跨月同週（例如 10/31 六跟 11/1 日是同一週）
   const rows = await env.DB.prepare(
-    'SELECT name, leave_dates FROM submissions WHERE month = ?'
-  ).bind(month).all();
+    'SELECT name, month, leave_dates FROM submissions WHERE month IN (?,?,?)'
+  ).bind(addMonths(month, -1), month, addMonths(month, 1)).all();
   const counts = {};
+  const weeklyCount = {};
   for (const r of rows.results || []) {
-    if (r.name === name) continue;
-    if (cfg.exempt.includes(r.name)) continue;
     let ds = [];
     try { ds = JSON.parse(r.leave_dates); } catch {}
-    for (const d of ds) counts[d] = (counts[d] || 0) + 1;
+    if (r.month === month) {
+      if (r.name === name) continue;
+      if (cfg.exempt.includes(r.name)) continue;
+      for (const d of ds) counts[d] = (counts[d] || 0) + 1;
+    } else if (r.name === name) {
+      for (const d of ds) { const w = weekKey(d); weeklyCount[w] = (weeklyCount[w] || 0) + 1; }
+    }
   }
   const exemptSelf = cfg.exempt.includes(name);
   const passedDaily = exemptSelf ? dates : dates.filter(d => (counts[d] || 0) < cap);
   const rejected = exemptSelf ? [] : dates.filter(d => (counts[d] || 0) >= cap);
 
   // 每人每週最多 weeklyCap 天：同一週超過的部分退回（留日期較早的）
-  const weeklyCount = {};
+  // weeklyCount 已含隔壁月份同週的舊資料，避免跨月分兩次送來洗上限
   const accepted = [], rejectedWeekly = [];
   for (const d of passedDaily) {
     const w = weekKey(d);
