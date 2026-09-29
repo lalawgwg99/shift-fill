@@ -74,7 +74,7 @@ function weekCount(ds){var w=weekKey(ds),c=0;mine.forEach(function(x){if(weekKey
 function dayName(a){return a.map(function(ds){return parseInt(ds.slice(8),10)+'號';}).join('、');}
 var WD=['日','一','二','三','四','五','六'];
 function nextMonth(){var d=new Date();d.setMonth(d.getMonth()+1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
-var month=nextMonth(), me=null, mine=new Set(), serverMine=new Set(), stats={days:{},maxLeave:4}, done=false, poll=null;
+var month=nextMonth(), me=null, mine=new Set(), serverMine=new Set(), stats={days:{},caps:{},maxLeave:4}, done=false, poll=null;
 
 function ml(){var p=month.split('-');return p[0]+'年'+parseInt(p[1],10)+'月';}
 function shiftMonth(k){var p=month.split('-'),y=+p[0],m=+p[1]+k;if(m<1){m=12;y--;}if(m>12){m=1;y++;}month=y+'-'+String(m).padStart(2,'0');me=null;mine=new Set();serverMine=new Set();done=false;render();}
@@ -87,7 +87,8 @@ async function fetchStats(){try{stats=await api('/api/stats?month='+month);if(me
 async function fetchMine(){try{var r=await api('/api/mine?name='+encodeURIComponent(me)+'&month='+month+'&pin='+encodeURIComponent(savedPin(me)));serverMine=new Set(r.leave||[]);mine=new Set(serverMine);}catch(e){serverMine=new Set();mine=new Set();}}
 
 function others(ds){var c=(stats.days[ds]&&stats.days[ds].count)||0;if(serverMine.has(ds)&&EXEMPT.indexOf(me)<0)c--;return c;}
-function isFull(ds){if(EXEMPT.indexOf(me)>=0)return false;return others(ds)>=stats.maxLeave&&!mine.has(ds);}
+function capOf(ds){var n=stats.caps&&stats.caps[ds];return (n>=1)?n:stats.maxLeave;} // 單日自訂上限優先
+function isFull(ds){if(EXEMPT.indexOf(me)>=0)return false;return others(ds)>=capOf(ds)&&!mine.has(ds);}
 
 function render(){
   document.getElementById('title').textContent=ml()+' 休假意願調查';
@@ -98,7 +99,7 @@ function render(){
   renderCal(v);
   function fmtD(ds){return parseInt(ds.slice(5,7),10)+'/'+parseInt(ds.slice(8),10);}
   var on=OPENFROM&&OPENTO?('，'+fmtD(OPENFROM)+'–'+fmtD(OPENTO)+' 開放選擇'):OPENFROM?('，'+fmtD(OPENFROM)+' 起開放選擇'):OPENTO?('，開放至 '+fmtD(OPENTO)):'';
-  bar.innerHTML='<button id="go">確定送出（已選 '+mine.size+' 天）</button><div class="hint" style="text-align:center">每日上限 '+stats.maxLeave+' 人，每週每人上限 '+WEEKLY+' 天'+on+'</div>';
+  bar.innerHTML='<button id="go">確定送出（已選 '+mine.size+' 天）</button><div class="hint" style="text-align:center">每日上限 '+stats.maxLeave+' 人（部分日期較少），每週每人上限 '+WEEKLY+' 天'+on+'</div>';
   document.getElementById('go').onclick=submit;
   startPoll();
 }
@@ -106,7 +107,7 @@ function renderNames(v){
   var h='<section><h2>請選擇姓名</h2><div class="names">';
   STAFF.forEach(function(n){h+='<button data-n="'+n+'">'+n+'</button>';});
   h+='</div></section>';
-  h+='<section><div class="hint">選擇姓名 → 點選日期 → 確定送出。<br>首次使用請設定 4 位數密碼。<br>每日上限 '+stats.maxLeave+' 人，每週每人上限 '+WEEKLY+' 天。</div></section>';
+  h+='<section><div class="hint">選擇姓名 → 點選日期 → 確定送出。<br>首次使用請設定 4 位數密碼。<br>每日上限 '+stats.maxLeave+' 人（部分日期較少），每週每人上限 '+WEEKLY+' 天。</div></section>';
   v.innerHTML=h;
   v.querySelectorAll('.names button').forEach(function(b){b.onclick=function(){pickName(b.getAttribute('data-n'));};});
 }
@@ -161,7 +162,7 @@ function renderPin(n,hasPin,msg){
 }
 function showNames(ds){
   var s=(stats.days[ds]&&stats.days[ds].names)||[];
-  document.getElementById('namespop-title').textContent=parseInt(ds.slice(8),10)+' 號休假（'+s.length+' 人）：';
+  document.getElementById('namespop-title').textContent=parseInt(ds.slice(8),10)+' 號休假（'+s.length+'/'+capOf(ds)+' 人）：';
   document.getElementById('namespop-list').innerHTML=s.map(function(n){return '<span class="tag">'+n+'</span>';}).join('')||'（無資料）';
   document.getElementById('namespop-bg').style.display='block';
   document.getElementById('namespop').style.display='block';
@@ -180,11 +181,11 @@ function renderCal(){
   function closed(ds){return (OPENFROM&&ds<OPENFROM)||(OPENTO&&ds>OPENTO);}
   function cell(ds,d){
     var pp=ds.split('-'),w=new Date(+pp[0],+pp[1]-1,+pp[2]).getDay(),wc=w===0?' sun':(w===6?' we':'');
-    var c=(stats.days[ds]&&stats.days[ds].count)||0;
+    var c=(stats.days[ds]&&stats.days[ds].count)||0,cap=capOf(ds);
     if(mine.has(ds))return '<div class="day me" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">我的休假</span></div>';
     if(closed(ds))return '<div class="day closed'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">'+((OPENFROM&&ds<OPENFROM)?'已排完':'未開放')+'</span></div>';
-    if(isFull(ds))return '<div class="day full'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">已滿'+stats.maxLeave+'人</span></div>';
-    return '<div class="day'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">'+c+'/'+stats.maxLeave+'</span></div>';
+    if(isFull(ds))return '<div class="day full'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">已滿'+cap+'人</span></div>';
+    return '<div class="day'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">'+c+'/'+cap+'</span></div>';
   }
   for(var d=1;d<=dim;d++)h+=cell(month+'-'+String(d).padStart(2,'0'),d);
   if(OPENTO){
