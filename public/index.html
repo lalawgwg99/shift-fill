@@ -61,6 +61,8 @@ input[type=password].pin{width:100%;border:1.5px solid #ddd;border-radius:10px;p
 <div class="msw"><button id="pm">‹</button><b id="mlab"></b><button id="nm">›</button></div>
 <div id="view"></div>
 <div class="bar" id="bar"><button id="go" disabled>確定送出</button></div>
+<div id="namespop-bg"></div>
+<div id="namespop"><h3 id="namespop-title"></h3><div id="namespop-list"></div><button class="close" id="namespop-close">關閉</button></div>
 <script>
 var STAFF=['榮德','耀南','淑玲','泰霖','蓬逸','建發','敏誠','瑜芳','宜萱','俊霖'];
 var EXEMPT=['榮德','俊霖'];
@@ -279,7 +281,5 @@ async function boot(){
 }
 boot();
 </script>
-<div id="namespop-bg"></div>
-<div id="namespop"><h3 id="namespop-title"></h3><div id="namespop-list"></div><button class="close" id="namespop-close">關閉</button></div>
 </body>
 </html>
