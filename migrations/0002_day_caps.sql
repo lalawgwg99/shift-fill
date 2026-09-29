@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS day_caps (
+  day TEXT PRIMARY KEY,
+  cap INTEGER NOT NULL
+);
