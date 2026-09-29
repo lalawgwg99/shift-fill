@@ -1,7 +1,9 @@
 import { ensureSchema, getConfig } from './config.js';
+import { readCaps } from './caps.js';
 
-// GET /api/stats?month=YYYY-MM -> { month, maxLeave, days: { "YYYY-MM-DD": { count, names } } }
+// GET /api/stats?month=YYYY-MM -> { month, maxLeave, caps, days: { "YYYY-MM-DD": { count, names } } }
 // count = 佔限額人數（不含豁免人員）；names = 當天所有休假的人
+// caps = 單日自訂上限 {"YYYY-MM-DD": n}，無設定則用 maxLeave
 export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
   const month = url.searchParams.get('month') || '';
@@ -22,5 +24,5 @@ export async function onRequestGet({ request, env }) {
       days[d].names.push(r.name);
     }
   }
-  return Response.json({ month, maxLeave: cfg.maxLeave, days });
+  return Response.json({ month, maxLeave: cfg.maxLeave, caps: await readCaps(env, month), days });
 }
