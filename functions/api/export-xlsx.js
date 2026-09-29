@@ -1,6 +1,7 @@
 // 一鍵匯出 Excel：POST {token, month} -> 下載真正的 .xlsx（管理員限定）。
 // 不依賴任何套件：手寫最小 xlsx（zip 無壓縮 + inline 字串）。
 import { ensureSchema, getConfig, verifyAdmin } from './config.js';
+import { readCaps } from './caps.js';
 
 const enc = new TextEncoder();
 
@@ -181,12 +182,19 @@ export async function onRequestPost({ request, env }) {
     s1.push([n, inP.map(md).join('、'), inP.length, gapDays(lv, pStart, pEnd)]);
   }
 
-  // 表2：每日統計（含跨月尾巴）
+  // 表2：每日統計（含跨月尾巴）；人數上限取單日自訂，否則用預設
+  const capsM = await readCaps(env, month);
+  const capsNext = pEnd.slice(0, 7) > month ? await readCaps(env, pEnd.slice(0, 7)) : {};
+  const capFor = ds => {
+    const c = ds.startsWith(month) ? capsM[ds] : capsNext[ds];
+    return (c != null ? c : cfg.maxLeave);
+  };
   const dayRow = ds => {
     const names = Object.keys(per).filter(n => per[n].includes(ds)).sort();
     const cnt = names.filter(n => !cfg.exempt.includes(n)).length;
+    const cap = capFor(ds);
     const dt = new Date(+ds.slice(0, 4), +ds.slice(5, 7) - 1, +ds.slice(8, 10));
-    return [md(ds), '週' + WD[dt.getDay()], cnt + '/' + cfg.maxLeave, cnt >= cfg.maxLeave ? '滿' : '', names.join('、')];
+    return [md(ds), '週' + WD[dt.getDay()], cnt + '/' + cap, cnt >= cap ? '滿' : '', names.join('、')];
   };
   const s2 = [['日期', '星期', '休假人數', '額滿', '休假名單']];
   for (let d = 1; d <= last; d++) s2.push(dayRow(month + '-' + String(d).padStart(2, '0')));
