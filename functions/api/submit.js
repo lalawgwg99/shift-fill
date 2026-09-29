@@ -16,7 +16,7 @@ export async function onRequestPost({ request, env }) {
   const cap = maxLeave(env);
   const dates = [...new Set((body.leave || []).filter(
     d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && d.startsWith(month)
-  )].sort();
+  ))].sort();
 
   const rows = await env.DB.prepare(
     'SELECT name, leave_dates FROM submissions WHERE month = ?'
