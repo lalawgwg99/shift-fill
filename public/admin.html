@@ -28,6 +28,14 @@ textarea{min-height:150px;line-height:1.8;resize:vertical}
 .err{color:#e5484d;font-size:14px;margin-top:10px;font-weight:700}
 .okmsg{color:#0a7d2c;font-size:14px;margin-top:10px;font-weight:700}
 .center{text-align:center;padding:40px 16px;color:#888}
+.ccal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px}
+.cdow{font-size:12px;color:#888;text-align:center;padding:4px 0}
+.cday{border:1.5px solid #e3e3e3;border-radius:8px;background:#fff;min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer}
+.cday .n{font-size:15px;font-weight:700}
+.cday .cc{font-size:11px;color:#888}
+.cday.custom{background:#fff7e6;border-color:#e6a23c}
+.cday.custom .cc{color:#b26a00;font-weight:700}
+.cday.blank{background:transparent;border:none;cursor:default}
 </style>
 </head>
 <body>
@@ -126,6 +134,12 @@ function renderForm(v){
     +'<div class="hint">「最長未休」超過 7 天會以紅色標示。</div>'
     +'<div id="sched" style="margin-top:6px"><div class="hint">讀取中…</div></div>'
     +'</section>'
+    +'<section><h2>單日人數上限</h2>'
+    +'<div class="hint">某些日子想限制更少人休假（例如只准 2～3 人）時，點該日期切換：預設 → 3 → 2 → 1 → 預設。橘色為自訂日期，點一下立即生效。</div>'
+    +'<div style="margin-top:8px"><input type="month" id="c_month" style="max-width:170px" value="'+schedMonth+'"/></div>'
+    +'<div id="capcal"><div class="hint">讀取中…</div></div>'
+    +'<div class="err" id="capmsg"></div>'
+    +'</section>'
     +'<section><h2>休假規則</h2>'
     +'<label>每日休假人數上限</label>'
     +'<input type="number" class="num" id="f_cap" min="1" max="20" value="'+cfg.maxLeave+'"/>'
@@ -167,6 +181,9 @@ function renderForm(v){
       var r=await api('/api/export?month='+m);
       if(r.status!==200||!r.body){box.innerHTML='<div class="hint">讀取失敗</div>';return;}
       var subs=r.body.submissions||[];
+      var capsR=await api('/api/caps?month='+m);
+      var caps=(capsR.body&&capsR.body.caps)||{};
+      var capFor=function(d){return (caps[d]>=1)?caps[d]:cfg.maxLeave;};
       var byDay={};
       subs.forEach(function(s){(s.leave||[]).forEach(function(d){(byDay[d]=byDay[d]||[]).push(s.name);});});
       var days=Object.keys(byDay).sort();
@@ -176,11 +193,12 @@ function renderForm(v){
         days.forEach(function(d){
           var names=byDay[d].slice().sort();
           var cnt=names.filter(function(n){return cfg.exempt.indexOf(n)<0;}).length;
-          var full=cnt>=cfg.maxLeave;
+          var cap=capFor(d);
+          var full=cnt>=cap;
           var wd='日一二三四五六'[new Date(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10)).getDay()];
           h+='<div style="display:flex;gap:8px;align-items:baseline;padding:8px 2px;border-bottom:1px solid #f0f0f0;font-size:14px">'
             +'<span style="white-space:nowrap;font-weight:700;min-width:88px">'+parseInt(d.slice(5,7),10)+'/'+parseInt(d.slice(8,10),10)+'（'+wd+'）</span>'
-            +'<span style="white-space:nowrap;font-weight:700;color:'+(full?'#c0392b':'#0a7d2c')+'">'+cnt+'/'+cfg.maxLeave+(full?' 滿':'')+'</span>'
+            +'<span style="white-space:nowrap;font-weight:700;color:'+(full?'#c0392b':'#0a7d2c')+'">'+cnt+'/'+cap+(full?' 滿':'')+'</span>'
             +'<span style="color:#333">'+names.join('、')+'</span></div>';
         });
       }
@@ -209,6 +227,49 @@ function renderForm(v){
   };
   document.getElementById('v_reload').onclick=loadSched;
   loadSched();
+  var dayCaps={};
+  var renderCapCal=async function(){
+    var box=document.getElementById('capcal');if(!box)return;
+    var m=document.getElementById('c_month').value;
+    if(!/^\d{4}-\d{2}$/.test(m)){box.innerHTML='<div class="hint">月份格式錯誤</div>';return;}
+    box.innerHTML='<div class="hint">讀取中…</div>';
+    try{
+      var r=await api('/api/caps?month='+m);
+      dayCaps=(r.body&&r.body.caps)||{};
+    }catch(e){dayCaps={};}
+    var p=m.split('-'),y=+p[0],mo=+p[1];
+    var first=new Date(y,mo-1,1).getDay(),dim=new Date(y,mo,0).getDate();
+    var h='<div class="ccal">';
+    ['日','一','二','三','四','五','六'].forEach(function(w){h+='<div class="cdow">'+w+'</div>';});
+    for(var i=0;i<first;i++)h+='<div class="cday blank"></div>';
+    for(var d=1;d<=dim;d++){
+      var ds=m+'-'+String(d).padStart(2,'0');
+      var cv=dayCaps[ds],custom=cv>=1;
+      h+='<div class="cday'+(custom?' custom':'')+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="cc">'+(custom?cv+' 人':'預設'+cfg.maxLeave)+'</span></div>';
+    }
+    h+='</div>';
+    box.innerHTML=h;
+    box.querySelectorAll('.cday[data-ds]').forEach(function(el){
+      el.onclick=async function(){
+        var ds=el.getAttribute('data-ds');
+        var cur=dayCaps[ds]>=1?dayCaps[ds]:null;
+        var nxt=cur===null?3:(cur===3?2:(cur===2?1:null));
+        var msg=document.getElementById('capmsg');msg.textContent='';
+        var payload={};payload[ds]=nxt;
+        var r2=await api('/api/caps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token,caps:payload})});
+        if(r2.status===403){
+          token='';sessionStorage.removeItem(TKEY);
+          renderLock(document.getElementById('view'),'密碼錯誤或已失效，請重新登入');
+          return;
+        }
+        if(r2.status!==200||!r2.body||!r2.body.ok){msg.textContent='儲存失敗，請重試';return;}
+        if(nxt===null)delete dayCaps[ds];else dayCaps[ds]=nxt;
+        renderCapCal();
+      };
+    });
+  };
+  document.getElementById('c_month').onchange=renderCapCal;
+  renderCapCal();
   document.getElementById('v_xlsx').onclick=async function(){
     var m=document.getElementById('v_month').value;
     if(!/^\d{4}-\d{2}$/.test(m)){alert('月份格式錯誤');return;}
