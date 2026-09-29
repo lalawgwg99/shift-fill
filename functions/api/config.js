@@ -64,6 +64,7 @@ export async function getConfig(env) {
     maxLeave: parseCap(env.MAX_LEAVE, 4, 1, 20),
     weeklyCap: parseCap(env.WEEKLY_CAP, 2, 1, 7),
     openFrom: '',
+    openTo: '',
     staff: [...DEFAULT_STAFF],
     exempt: [...DEFAULT_EXEMPT]
   };
@@ -73,6 +74,7 @@ export async function getConfig(env) {
       if (r.key === 'maxLeave') cfg.maxLeave = parseCap(r.value, cfg.maxLeave, 1, 20);
       else if (r.key === 'weeklyCap') cfg.weeklyCap = parseCap(r.value, cfg.weeklyCap, 1, 7);
       else if (r.key === 'openFrom') cfg.openFrom = String(r.value || '');
+      else if (r.key === 'openTo') cfg.openTo = String(r.value || '');
       else if (r.key === 'staff') { const a = parseStoredNameList(r.value); if (a.length) cfg.staff = a; }
       else if (r.key === 'exempt') cfg.exempt = parseStoredNameList(r.value).filter(n => cfg.staff.includes(n));
     }
@@ -99,7 +101,7 @@ async function setConfigValue(env, key, value) {
 }
 
 function publicConfig(cfg, hasAdminToken) {
-  return { maxLeave: cfg.maxLeave, weeklyCap: cfg.weeklyCap, openFrom: cfg.openFrom, staff: cfg.staff, exempt: cfg.exempt, hasAdminToken };
+  return { maxLeave: cfg.maxLeave, weeklyCap: cfg.weeklyCap, openFrom: cfg.openFrom, openTo: cfg.openTo, staff: cfg.staff, exempt: cfg.exempt, hasAdminToken };
 }
 
 // GET /api/config -> { maxLeave, weeklyCap, staff, exempt, hasAdminToken }
@@ -142,10 +144,20 @@ export async function onRequestPost({ request, env }) {
     if (!(n >= 1 && n <= 7)) return Response.json({ error: 'bad weeklyCap' }, { status: 400 });
     await setConfigValue(env, 'weeklyCap', String(n));
   }
+  const curCfg = await getConfig(env);
   if (body.openFrom !== undefined) {
     const v = String(body.openFrom || '').trim();
     if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return Response.json({ error: 'bad openFrom' }, { status: 400 });
+    const t = body.openTo !== undefined ? String(body.openTo || '').trim() : curCfg.openTo;
+    if (v && t && t < v) return Response.json({ error: 'bad range' }, { status: 400 });
     await setConfigValue(env, 'openFrom', v);
+  }
+  if (body.openTo !== undefined) {
+    const v = String(body.openTo || '').trim();
+    if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return Response.json({ error: 'bad openTo' }, { status: 400 });
+    const f = body.openFrom !== undefined ? String(body.openFrom || '').trim() : curCfg.openFrom;
+    if (v && f && v < f) return Response.json({ error: 'bad range' }, { status: 400 });
+    await setConfigValue(env, 'openTo', v);
   }
   let staff = null;
   if (body.staff !== undefined) {

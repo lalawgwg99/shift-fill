@@ -34,15 +34,19 @@ export async function onRequestPost({ request, env }) {
   if (chk !== 'ok') return Response.json({ error: chk }, { status: 403 });
   const cap = cfg.maxLeave;
   const raw = Array.isArray(body.leave) ? body.leave : [];
+  // 未開放的日期（開放起始日之前＝已排完，開放結束日之後＝未開放）：直接退回，不計入任何規則
+  const openFrom = cfg.openFrom || '', openTo = cfg.openTo || '';
   const picked = raw.filter(isValidDate);
   const all = [...new Set(picked)].sort();
-  // 未開放的日期（開放起始日之前，多半是已經排完的）：直接退回，不計入任何規則
-  const openFrom = cfg.openFrom || '';
-  const rejectedClosed = openFrom ? all.filter(d => d < openFrom) : [];
-  const dates = openFrom ? all.filter(d => d >= openFrom) : all;
+  const rejectedClosed = all.filter(d => (openFrom && d < openFrom) || (openTo && d > openTo));
+  const dates = all.filter(d => !rejectedClosed.includes(d));
 
   function isValidDate(d) {
-    return typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && d.startsWith(month);
+    if (typeof d !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+    if (d < month + '-01') return false;
+    // 有結束日且跨到下個月：尾巴日期（如下個月的 11/1）也算這個月的調查範圍
+    if (openTo && openTo.slice(0, 7) > month) return d <= openTo;
+    return d.startsWith(month);
   }
 
   // 讀本月＋前後月：每天上限只看本月；每週上限要含跨月同週（例如 10/31 六跟 11/1 日是同一週）

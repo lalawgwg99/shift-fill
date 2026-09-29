@@ -44,6 +44,10 @@ h2{font-size:15px;margin-bottom:10px}
 .ok .big{font-size:52px}
 .ok p{margin:10px 0;font-size:15px}
 .tag{display:inline-block;background:#e8f9ee;color:#0a7d2c;border-radius:6px;padding:3px 10px;font-size:13px;margin:3px;font-weight:700}
+#namespop-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:40}
+#namespop{display:none;position:fixed;left:0;right:0;bottom:0;background:#fff;border-radius:16px 16px 0 0;padding:18px 18px 26px;box-shadow:0 -4px 24px rgba(0,0,0,.18);z-index:50}
+#namespop h3{margin:0 0 10px;font-size:16px}
+#namespop .close{margin-top:14px;width:100%;padding:12px;border-radius:10px;border:1.5px solid #06C755;background:#fff;color:#06C755;font-size:16px;font-weight:700;cursor:pointer}
 .err{color:#e5484d;font-size:13px;margin-top:8px;font-weight:700}
 .bigbtn{width:100%;padding:14px;border:none;border-radius:12px;background:#06C755;color:#fff;font-size:17px;font-weight:700;cursor:pointer;margin-top:16px}
 .bigbtn:disabled{background:#ccc}
@@ -61,7 +65,7 @@ input[type=password].pin{width:100%;border:1.5px solid #ddd;border-radius:10px;p
 var STAFF=['榮德','耀南','淑玲','泰霖','蓬逸','建發','敏誠','瑜芳','宜萱','俊霖'];
 var EXEMPT=['榮德','俊霖'];
 var WEEKLY=2;
-var OPENFROM='';
+var OPENFROM='',OPENTO='';
 function weekKey(ds){var p=ds.split('-');var dt=new Date(Date.UTC(+p[0],+p[1]-1,+p[2]));dt.setUTCDate(dt.getUTCDate()-((dt.getUTCDay()+6)%7));return dt.toISOString().slice(0,10);}
 function exemptNote(){return EXEMPT.length?'（'+EXEMPT.join('、')+'不佔名額）':'';}
 function weekCount(ds){var w=weekKey(ds),c=0;mine.forEach(function(x){if(weekKey(x)===w)c++;});return c;}
@@ -78,7 +82,7 @@ document.getElementById('nm').onclick=function(){shiftMonth(1);};
 async function api(p,opt){var r=await fetch(p,opt);if(!r.ok){var e=new Error('net');e.status=r.status;try{e.body=await r.json();}catch(_){e.body=null;}throw e;}return r.json();}
 function savedPin(n){return sessionStorage.getItem('shift_pin_'+n)||'';}
 async function fetchStats(){try{stats=await api('/api/stats?month='+month);if(me&&!done)renderCal();}catch(e){}}
-async function fetchMine(){try{var r=await api('/api/mine?name='+encodeURIComponent(me)+'&month='+month);serverMine=new Set(r.leave||[]);mine=new Set(serverMine);}catch(e){serverMine=new Set();mine=new Set();}}
+async function fetchMine(){try{var r=await api('/api/mine?name='+encodeURIComponent(me)+'&month='+month+'&pin='+encodeURIComponent(savedPin(me)));serverMine=new Set(r.leave||[]);mine=new Set(serverMine);}catch(e){serverMine=new Set();mine=new Set();}}
 
 function others(ds){var c=(stats.days[ds]&&stats.days[ds].count)||0;if(serverMine.has(ds)&&EXEMPT.indexOf(me)<0)c--;return c;}
 function isFull(ds){if(EXEMPT.indexOf(me)>=0)return false;return others(ds)>=stats.maxLeave&&!mine.has(ds);}
@@ -90,7 +94,8 @@ function render(){
   if(!me){renderNames(v);bar.innerHTML='<button id="go" disabled>請先選名字</button>';stopPoll();return;}
   if(done){renderDone(v);bar.innerHTML='<button id="go2" class="ghost" style="width:100%;padding:14px;border-radius:12px;background:#fff;color:#06C755;border:1.5px solid #06C755;font-size:17px;font-weight:700;cursor:pointer">修改我的休假</button>';document.getElementById('go2').onclick=function(){done=false;render();};stopPoll();return;}
   renderCal(v);
-  var on=OPENFROM?('，'+parseInt(OPENFROM.slice(5,7),10)+'/'+parseInt(OPENFROM.slice(8),10)+' 起開放選擇'):'';
+  function fmtD(ds){return parseInt(ds.slice(5,7),10)+'/'+parseInt(ds.slice(8),10);}
+  var on=OPENFROM&&OPENTO?('，'+fmtD(OPENFROM)+'–'+fmtD(OPENTO)+' 開放選擇'):OPENFROM?('，'+fmtD(OPENFROM)+' 起開放選擇'):OPENTO?('，開放至 '+fmtD(OPENTO)):'';
   bar.innerHTML='<button id="go">確定送出（已選 '+mine.size+' 天）</button><div class="hint" style="text-align:center">每天最多 '+stats.maxLeave+' 人休假'+exemptNote()+'，每週每人最多先排 '+WEEKLY+' 天'+on+'，滿了的日期不能選</div>';
   document.getElementById('go').onclick=submit;
   startPoll();
@@ -152,6 +157,17 @@ function renderPin(n,hasPin,msg){
   document.getElementById('pin').onkeydown=function(e){if(e.key==='Enter')go();};
   setTimeout(function(){var i=document.getElementById('pin');if(i)i.focus();},100);
 }
+function showNames(ds){
+  var s=(stats.days[ds]&&stats.days[ds].names)||[];
+  document.getElementById('namespop-title').textContent=parseInt(ds.slice(8),10)+' 號休假（'+s.length+' 人）：';
+  document.getElementById('namespop-list').innerHTML=s.map(function(n){return '<span class="tag">'+n+'</span>';}).join('')||'（無資料）';
+  document.getElementById('namespop-bg').style.display='block';
+  document.getElementById('namespop').style.display='block';
+}
+function hideNames(){
+  document.getElementById('namespop-bg').style.display='none';
+  document.getElementById('namespop').style.display='none';
+}
 function renderCal(){
   var v=document.getElementById('view');
   var p=month.split('-'),y=+p[0],m=+p[1];
@@ -159,22 +175,37 @@ function renderCal(){
   var h='<section><h2 style="display:flex;justify-content:space-between;align-items:center"><span>'+me+'，點日期選休假'+(EXEMPT.indexOf(me)>=0?'（排班人員不受名額限制）':'（再點一次取消）')+'</span><button id="switchuser" style="border:1.5px solid #ddd;background:#fff;border-radius:20px;padding:6px 14px;font-size:13px;color:#666;cursor:pointer;white-space:nowrap">換人</button></h2><div class="cal">';
   WD.forEach(function(w,i){h+='<div class="dow'+(i===0?' sun':'')+(i===6?' sat':'')+'">'+w+'</div>';});
   for(var i=0;i<first;i++)h+='<div class="day blank"></div>';
-  for(var d=1;d<=dim;d++){
-    var ds=month+'-'+String(d).padStart(2,'0');
-    var w=new Date(y,m-1,d).getDay(),wc=w===0?' sun':(w===6?' we':'');
+  function closed(ds){return (OPENFROM&&ds<OPENFROM)||(OPENTO&&ds>OPENTO);}
+  function cell(ds,d){
+    var pp=ds.split('-'),w=new Date(+pp[0],+pp[1]-1,+pp[2]).getDay(),wc=w===0?' sun':(w===6?' we':'');
     var c=(stats.days[ds]&&stats.days[ds].count)||0;
-    if(mine.has(ds)){h+='<div class="day me" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">我的休假</span></div>';}
-    else if(OPENFROM&&ds<OPENFROM){h+='<div class="day closed'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">已排完</span></div>';}
-    else if(isFull(ds)){h+='<div class="day full'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">已滿'+stats.maxLeave+'人</span></div>';}
-    else{h+='<div class="day'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">'+c+'/'+stats.maxLeave+'</span></div>';}
+    if(mine.has(ds))return '<div class="day me" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">我的休假</span></div>';
+    if(closed(ds))return '<div class="day closed'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">'+((OPENFROM&&ds<OPENFROM)?'已排完':'未開放')+'</span></div>';
+    if(isFull(ds))return '<div class="day full'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">已滿'+stats.maxLeave+'人</span></div>';
+    return '<div class="day'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">'+c+'/'+stats.maxLeave+'</span></div>';
   }
-  h+='</div><div class="hint">綠色是你的休假；灰色「已滿」是當天休假已達 '+stats.maxLeave+' 人'+(EXEMPT.length?'（不含'+EXEMPT.join('、')+'）':'')+'，不能再選。</div><div class="err" id="err"></div></section>';
+  for(var d=1;d<=dim;d++)h+=cell(month+'-'+String(d).padStart(2,'0'),d);
+  if(OPENTO){
+    var lastDs=month+'-'+String(dim).padStart(2,'0');
+    if(OPENTO>lastDs){
+      h+='<div style="grid-column:1/-1;color:#999;font-size:13px;margin-top:6px">'+parseInt(OPENTO.slice(5,7),10)+' 月</div>';
+      var dt=new Date(y,m-1,dim+1),n=0;
+      while(n<31){
+        var tds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+        if(tds>OPENTO)break;
+        h+=cell(tds,dt.getDate());
+        dt.setDate(dt.getDate()+1);n++;
+      }
+    }
+  }
+  h+='</div><div class="hint">綠色是你的休假；灰色「已滿」是當天休假已達 '+stats.maxLeave+' 人'+(EXEMPT.length?'（不含'+EXEMPT.join('、')+'）':'')+'，不能再選，點一下可看是誰排。半透明是已排完或未開放的日期。</div><div class="err" id="err"></div></section>';
   v.innerHTML=h;
   var su=document.getElementById('switchuser');if(su)su.onclick=function(){me=null;done=false;render();};
   v.querySelectorAll('.day[data-ds]').forEach(function(el){
     el.onclick=function(){
       var ds=el.getAttribute('data-ds');
-      if(el.classList.contains('full')||el.classList.contains('closed'))return;
+      if(el.classList.contains('closed'))return;
+      if(el.classList.contains('full')){showNames(ds);return;}
       if(mine.has(ds)){mine.delete(ds);}
       else{
         if(weekCount(ds)>=WEEKLY){
@@ -234,16 +265,21 @@ async function submit(){
 function startPoll(){stopPoll();poll=setInterval(fetchStats,5000);}
 function stopPoll(){if(poll){clearInterval(poll);poll=null;}}
 async function boot(){
+  document.getElementById('namespop-close').onclick=hideNames;
+  document.getElementById('namespop-bg').onclick=hideNames;
   try{
     var c=await api('/api/config');
     if(c.staff&&c.staff.length)STAFF=c.staff;
     if(c.exempt)EXEMPT=c.exempt;
     if(c.weeklyCap)WEEKLY=c.weeklyCap;
     if(c.openFrom!==undefined)OPENFROM=c.openFrom||'';
+    if(c.openTo!==undefined)OPENTO=c.openTo||'';
   }catch(e){}
   render();fetchStats();
 }
 boot();
 </script>
+<div id="namespop-bg"></div>
+<div id="namespop"><h3 id="namespop-title"></h3><div id="namespop-list"></div><button class="close" id="namespop-close">關閉</button></div>
 </body>
 </html>

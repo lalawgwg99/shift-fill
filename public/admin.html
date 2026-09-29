@@ -101,7 +101,16 @@ function renderLock(v,err){
 
 function renderForm(v){
   var staffTxt=cfg.staff.join('\n');
-  var h='<section><h2>休假規則</h2>'
+  var t=new Date();var curM=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0');
+  var schedMonth=cfg.openFrom?cfg.openFrom.slice(0,7):curM;
+  var h='<section><h2>休假一覽</h2>'
+    +'<div style="display:flex;gap:8px;align-items:center">'
+    +'<input type="month" id="v_month" style="max-width:170px" value="'+schedMonth+'"/>'
+    +'<button class="ghostbtn" id="v_reload" style="width:auto;margin-top:0;padding:10px 18px">重新整理</button>'
+    +'</div>'
+    +'<div id="sched" style="margin-top:6px"><div class="hint">讀取中…</div></div>'
+    +'</section>'
+    +'<section><h2>休假規則</h2>'
     +'<label>每天最多休假人數 <small>（目前 '+cfg.maxLeave+' 人）</small></label>'
     +'<input type="number" class="num" id="f_cap" min="1" max="20" value="'+cfg.maxLeave+'"/>'
     +'<label>每週每人最多先排天數 <small>（目前 '+cfg.weeklyCap+' 天，可調）</small></label>'
@@ -109,6 +118,8 @@ function renderForm(v){
     +'<div class="hint">第一輪每人每週最多排上面這個天數；之後要開放更多天，直接把數字調大即可。</div>'
     +'<label>開放選擇起始日 <small>（此日期之前的日期會變透明、不能選；空白=不限制）</small></label>'
     +'<input type="date" id="f_openfrom" style="max-width:190px" value="'+(cfg.openFrom||'')+'"/>'
+    +'<label>開放選擇結束日 <small>（此日期之後的日期會變透明、不能選；空白=不限制）</small></label>'
+    +'<input type="date" id="f_opento" style="max-width:190px" value="'+(cfg.openTo||'')+'"/>'
     +'<div class="hint">例如 10/1–10/4 已經排完，就設為 2026-10-05。換月份調查時記得回來更新。</div>'
     +'</section>'
     +'<section><h2>人員</h2>'
@@ -127,6 +138,47 @@ function renderForm(v){
     +'<button class="ghostbtn" id="logout">登出</button>'
     +'</section>';
   v.innerHTML=h;
+  var loadSched=async function(){
+    var box=document.getElementById('sched');if(!box)return;
+    var m=document.getElementById('v_month').value;
+    if(!/^\d{4}-\d{2}$/.test(m)){box.innerHTML='<div class="hint">月份格式錯誤</div>';return;}
+    box.innerHTML='<div class="hint">讀取中…</div>';
+    try{
+      var r=await api('/api/export?month='+m);
+      if(r.status!==200||!r.body){box.innerHTML='<div class="hint">讀取失敗</div>';return;}
+      var subs=r.body.submissions||[];
+      var byDay={};
+      subs.forEach(function(s){(s.leave||[]).forEach(function(d){(byDay[d]=byDay[d]||[]).push(s.name);});});
+      var days=Object.keys(byDay).sort();
+      var h='';
+      if(!days.length){h='<div class="hint">這個月還沒有人送出</div>';}
+      else{
+        days.forEach(function(d){
+          var names=byDay[d].slice().sort();
+          var cnt=names.filter(function(n){return cfg.exempt.indexOf(n)<0;}).length;
+          var full=cnt>=cfg.maxLeave;
+          var wd='日一二三四五六'[new Date(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10)).getDay()];
+          h+='<div style="display:flex;gap:8px;align-items:baseline;padding:8px 2px;border-bottom:1px solid #f0f0f0;font-size:14px">'
+            +'<span style="white-space:nowrap;font-weight:700;min-width:88px">'+parseInt(d.slice(5,7),10)+'/'+parseInt(d.slice(8,10),10)+'（'+wd+'）</span>'
+            +'<span style="white-space:nowrap;font-weight:700;color:'+(full?'#c0392b':'#0a7d2c')+'">'+cnt+'/'+cfg.maxLeave+(full?' 滿':'')+'</span>'
+            +'<span style="color:#333">'+names.join('、')+'</span></div>';
+        });
+      }
+      var per={};
+      subs.forEach(function(s){per[s.name]=(s.leave||[]).slice().sort();});
+      var pn=Object.keys(per).sort();
+      if(pn.length){
+        h+='<div class="hint" style="margin:12px 0 4px">每人小計</div>';
+        pn.forEach(function(n){
+          var ds=per[n].map(function(d){return parseInt(d.slice(5,7),10)+'/'+parseInt(d.slice(8,10),10);});
+          h+='<div style="font-size:13px;color:#555;padding:5px 2px;border-bottom:1px solid #f5f5f5">'+n+'：'+(ds.length?ds.join('、')+'（共'+ds.length+'天）':'未排')+'</div>';
+        });
+      }
+      box.innerHTML=h;
+    }catch(e){box.innerHTML='<div class="hint">讀取失敗，請檢查網路</div>';}
+  };
+  document.getElementById('v_reload').onclick=loadSched;
+  loadSched();
   var buildEx=function(){
     var names=document.getElementById('f_staff').value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
     var checked={};
@@ -184,12 +236,15 @@ function renderForm(v){
     var exChecked=[];document.querySelectorAll('#exlist input:checked').forEach(function(c){exChecked.push(c.value);});
     var newpw=document.getElementById('f_newpw').value;
     var openfrom=document.getElementById('f_openfrom').value;
+    var opento=document.getElementById('f_opento').value;
     if(!(cap>=1&&cap<=20)){m.textContent='每天人數請填 1～20';return;}
     if(!(weekly>=1&&weekly<=7)){m.textContent='每週天數請填 1～7';return;}
     if(openfrom&&!/^\d{4}-\d{2}-\d{2}$/.test(openfrom)){m.textContent='起始日格式錯誤';return;}
+    if(opento&&!/^\d{4}-\d{2}-\d{2}$/.test(opento)){m.textContent='結束日格式錯誤';return;}
+    if(openfrom&&opento&&opento<openfrom){m.textContent='結束日不能早於起始日';return;}
     if(!staff.length){m.textContent='員工名單不能空白';return;}
     if(newpw&&newpw.length<4){m.textContent='新密碼至少 4 碼';return;}
-    var payload={token:token,maxLeave:cap,weeklyCap:weekly,openFrom:openfrom,staff:staff,exempt:exChecked};
+    var payload={token:token,maxLeave:cap,weeklyCap:weekly,openFrom:openfrom,openTo:opento,staff:staff,exempt:exChecked};
     if(newpw)payload.newToken=newpw;
     var btn=document.getElementById('save');btn.disabled=true;btn.textContent='儲存中…';
     var r=await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
