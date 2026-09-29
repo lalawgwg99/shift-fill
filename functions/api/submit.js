@@ -1,5 +1,6 @@
 import { ensureSchema, getConfig } from './config.js';
 import { checkPin } from './pin.js';
+import { readCaps } from './caps.js';
 
 // 該日期所在週（週一起算）的 key：同屬一週的日期 key 相同
 function weekKey(ds) {
@@ -33,6 +34,8 @@ export async function onRequestPost({ request, env }) {
   const chk = await checkPin(env, name, body.pin);
   if (chk !== 'ok') return Response.json({ error: chk }, { status: 403 });
   const cap = cfg.maxLeave;
+  const caps = await readCaps(env, month);
+  const capFor = d => (caps[d] != null ? caps[d] : cap); // 單日自訂上限優先，否則用預設
   const raw = Array.isArray(body.leave) ? body.leave : [];
   // 未開放的日期（開放起始日之前＝已排完，開放結束日之後＝未開放）：直接退回，不計入任何規則
   const openFrom = cfg.openFrom || '', openTo = cfg.openTo || '';
@@ -67,8 +70,8 @@ export async function onRequestPost({ request, env }) {
     }
   }
   const exemptSelf = cfg.exempt.includes(name);
-  const passedDaily = exemptSelf ? dates : dates.filter(d => (counts[d] || 0) < cap);
-  const rejected = exemptSelf ? [] : dates.filter(d => (counts[d] || 0) >= cap);
+  const passedDaily = exemptSelf ? dates : dates.filter(d => (counts[d] || 0) < capFor(d));
+  const rejected = exemptSelf ? [] : dates.filter(d => (counts[d] || 0) >= capFor(d));
 
   // 每人每週最多 weeklyCap 天：同一週超過的部分退回（留日期較早的）
   // weeklyCount 已含隔壁月份同週的舊資料，避免跨月分兩次送來洗上限
