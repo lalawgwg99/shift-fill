@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>休假意願調查</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC",sans-serif;background:#f4f5f7;color:#222;padding-bottom:96px}
+header{background:#06C755;color:#fff;padding:14px 16px;position:sticky;top:0;z-index:10}
+header h1{font-size:18px}
+.msw{display:flex;align-items:center;justify-content:center;gap:18px;margin:12px 0}
+.msw button{border:1px solid #ddd;background:#fff;border-radius:8px;padding:6px 14px;font-size:16px;cursor:pointer}
+.msw b{font-size:18px}
+section{background:#fff;margin:10px 12px;border-radius:12px;padding:14px}
+h2{font-size:15px;margin-bottom:10px}
+.names{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.names button{padding:12px 0;border:1.5px solid #ddd;border-radius:10px;background:#fff;font-size:15px;font-weight:700;cursor:pointer}
+.names button.on{background:#06C755;color:#fff;border-color:#06C755}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.dow{font-size:12px;color:#888;text-align:center;padding:4px 0}
+.dow.sun{color:#e5484d}.dow.sat{color:#2f6fed}
+.day{border:1px solid #e3e3e3;border-radius:8px;background:#fff;font-size:15px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:54px;cursor:pointer}
+.day .c{font-size:10px;color:#888}
+.day .n{font-weight:700}
+.day.we .n{color:#2f6fed}
+.day.sun .n{color:#e5484d}
+.day.me{background:#06C755;border-color:#06C755}
+.day.me .n,.day.me .c{color:#fff}
+.day.full{background:#f0f0f0;border-color:#ddd;cursor:not-allowed}
+.day.full .n{color:#aaa}
+.day.full .c{color:#e5484d;font-weight:700}
+.day.blank{background:transparent;border:none;cursor:default}
+.bar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #ddd;padding:10px 14px calc(10px + env(safe-area-inset-bottom))}
+.bar button{width:100%;padding:14px;border:none;border-radius:12px;background:#06C755;color:#fff;font-size:17px;font-weight:700;cursor:pointer}
+.bar button:disabled{background:#ccc}
+.bar button.ghost{background:#fff;color:#06C755;border:1.5px solid #06C755;margin-top:8px}
+.hint{font-size:12px;color:#888;margin-top:8px;line-height:1.7}
+.ok{text-align:center;padding:30px 10px}
+.ok .big{font-size:52px}
+.ok p{margin:10px 0;font-size:15px}
+.tag{display:inline-block;background:#e8f9ee;color:#0a7d2c;border-radius:6px;padding:3px 10px;font-size:13px;margin:3px;font-weight:700}
+.err{color:#e5484d;font-size:13px;margin-top:8px;font-weight:700}
+</style>
+</head>
+<body>
+<header><h1 id="title">休假意願調查</h1></header>
+<div class="msw"><button id="pm">‹</button><b id="mlab"></b><button id="nm">›</button></div>
+<div id="view"></div>
+<div class="bar" id="bar"><button id="go" disabled>確定送出</button></div>
+<script>
+var STAFF=['榮德','耀南','淑玲','泰霖','蓬逸','建發','敏誠','瑜芳','宜萱','俊霖'];
+var WD=['日','一','二','三','四','五','六'];
+function nextMonth(){var d=new Date();d.setMonth(d.getMonth()+1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+var month=nextMonth(), me=null, mine=new Set(), serverMine=new Set(), stats={days:{},maxLeave:4}, done=false, poll=null;
+
+function ml(){var p=month.split('-');return p[0]+'年'+parseInt(p[1],10)+'月';}
+function shiftMonth(k){var p=month.split('-'),y=+p[0],m=+p[1]+k;if(m<1){m=12;y--;}if(m>12){m=1;y++;}month=y+'-'+String(m).padStart(2,'0');me=null;mine=new Set();serverMine=new Set();done=false;render();}
+document.getElementById('pm').onclick=function(){shiftMonth(-1);};
+document.getElementById('nm').onclick=function(){shiftMonth(1);};
+
+async function api(p,opt){var r=await fetch(p,opt);if(!r.ok)throw new Error('net');return r.json();}
+async function fetchStats(){try{stats=await api('/api/stats?month='+month);if(me&&!done)renderCal();}catch(e){}}
+async function fetchMine(){try{var r=await api('/api/mine?name='+encodeURIComponent(me)+'&month='+month);serverMine=new Set(r.leave||[]);mine=new Set(serverMine);}catch(e){serverMine=new Set();mine=new Set();}}
+
+function others(ds){var c=(stats.days[ds]&&stats.days[ds].count)||0;return c-(serverMine.has(ds)?1:0);}
+function isFull(ds){return others(ds)>=stats.maxLeave&&!mine.has(ds);}
+
+function render(){
+  document.getElementById('title').textContent=ml()+' 休假意願調查';
+  document.getElementById('mlab').textContent=ml();
+  var v=document.getElementById('view'),bar=document.getElementById('bar');
+  if(!me){renderNames(v);bar.innerHTML='<button id="go" disabled>請先選名字</button>';stopPoll();return;}
+  if(done){renderDone(v);bar.innerHTML='<button id="go2" class="ghost" style="width:100%;padding:14px;border-radius:12px;background:#fff;color:#06C755;border:1.5px solid #06C755;font-size:17px;font-weight:700;cursor:pointer">修改我的休假</button>';document.getElementById('go2').onclick=function(){done=false;render();};stopPoll();return;}
+  renderCal(v);
+  bar.innerHTML='<button id="go">確定送出（已選 '+mine.size+' 天）</button><div class="hint" style="text-align:center">每天最多 '+stats.maxLeave+' 人休假，滿了的日期不能選</div>';
+  document.getElementById('go').onclick=submit;
+  startPoll();
+}
+function renderNames(v){
+  var h='<section><h2>我是誰？（點自己的名字）</h2><div class="names">';
+  STAFF.forEach(function(n){h+='<button data-n="'+n+'">'+n+'</button>';});
+  h+='</div></section>';
+  h+='<section><div class="hint">點名字 → 點日期選休假 → 確定送出。<br>每天最多 '+stats.maxLeave+' 人休假，人數即時顯示，滿了就不能選。</div></section>';
+  v.innerHTML=h;
+  v.querySelectorAll('.names button').forEach(function(b){b.onclick=async function(){me=b.getAttribute('data-n');await fetchMine();done=false;render();};});
+}
+function renderCal(){
+  var v=document.getElementById('view');
+  var p=month.split('-'),y=+p[0],m=+p[1];
+  var first=new Date(y,m-1,1).getDay(),dim=new Date(y,m,0).getDate();
+  var h='<section><h2>'+me+'，點日期選休假（再點一次取消）</h2><div class="cal">';
+  WD.forEach(function(w,i){h+='<div class="dow'+(i===0?' sun':'')+(i===6?' sat':'')+'">'+w+'</div>';});
+  for(var i=0;i<first;i++)h+='<div class="day blank"></div>';
+  for(var d=1;d<=dim;d++){
+    var ds=month+'-'+String(d).padStart(2,'0');
+    var w=new Date(y,m-1,d).getDay(),wc=w===0?' sun':(w===6?' we':'');
+    var c=(stats.days[ds]&&stats.days[ds].count)||0;
+    if(mine.has(ds)){h+='<div class="day me" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">我的休假</span></div>';}
+    else if(isFull(ds)){h+='<div class="day full'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">已滿'+stats.maxLeave+'人</span></div>';}
+    else{h+='<div class="day'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">'+c+'/'+stats.maxLeave+'</span></div>';}
+  }
+  h+='</div><div class="hint">綠色是你的休假；灰色「已滿」是當天休假已達 '+stats.maxLeave+' 人，不能再選。</div><div class="err" id="err"></div></section>';
+  v.innerHTML=h;
+  v.querySelectorAll('.day[data-ds]').forEach(function(el){
+    el.onclick=function(){
+      var ds=el.getAttribute('data-ds');
+      if(el.classList.contains('full'))return;
+      if(mine.has(ds))mine.delete(ds);else mine.add(ds);
+      renderCal();
+      var go=document.getElementById('go');if(go)go.textContent='確定送出（已選 '+mine.size+' 天）';
+    };
+  });
+}
+function renderDone(v){
+  var arr=[...mine].sort();
+  var h='<section><div class="ok"><div class="big">✓</div><p><b>'+me+'</b>，你選了 <b>'+arr.length+'</b> 天休假：</p><div>';
+  arr.forEach(function(ds){h+='<span class="tag">'+parseInt(ds.slice(8),10)+'號</span>';});
+  h+='</div><div class="hint">如果有人異動，數字會即時更新。<br>要改的話按下方「修改我的休假」。</div></div></section>';
+  v.innerHTML=h;
+}
+async function submit(){
+  var go=document.getElementById('go');go.disabled=true;go.textContent='送出中…';
+  try{
+    var r=await api('/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:me,month:month,leave:[...mine]})});
+    if(r.rejected&&r.rejected.length){
+      r.rejected.forEach(function(ds){mine.delete(ds);});
+      var e=document.getElementById('err');
+      renderCal();
+      document.getElementById('err').textContent='以下日期剛被別人選滿（'+r.maxLeave+'人），請改選其他日期：'+r.rejected.map(function(ds){return parseInt(ds.slice(8),10)+'號';}).join('、');
+      var go2=document.getElementById('go');if(go2){go2.disabled=false;go2.textContent='確定送出（已選 '+mine.size+' 天）';go2.onclick=submit;}
+      await fetchStats();await fetchMine();return;
+    }
+    serverMine=new Set([...mine]);done=true;render();fetchStats();
+  }catch(e){go.disabled=false;go.textContent='確定送出（已選 '+mine.size+' 天）';alert('送出失敗，請檢查網路後再試');}
+}
+function startPoll(){stopPoll();poll=setInterval(fetchStats,5000);}
+function stopPoll(){if(poll){clearInterval(poll);poll=null;}}
+render();fetchStats();
+</script>
+</body>
+</html>
