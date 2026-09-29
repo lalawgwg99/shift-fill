@@ -33,6 +33,7 @@ h2{font-size:15px;margin-bottom:10px}
 .day.full{background:#f0f0f0;border-color:#ddd;cursor:not-allowed}
 .day.full .n{color:#aaa}
 .day.full .c{color:#e5484d;font-weight:700}
+.day.lc{background:#fff3e0}
 .day.closed{opacity:.25;background:#f5f5f5;cursor:not-allowed}
 .day.closed .n{color:#bbb}
 .day.closed .c{color:#bbb}
@@ -183,11 +184,11 @@ function renderCal(){
   function closed(ds){return (OPENFROM&&ds<OPENFROM)||(OPENTO&&ds>OPENTO);}
   function cell(ds,d){
     var pp=ds.split('-'),w=new Date(+pp[0],+pp[1]-1,+pp[2]).getDay(),wc=w===0?' sun':(w===6?' we':'');
-    var c=(stats.days[ds]&&stats.days[ds].count)||0,cap=capOf(ds);
+    var c=(stats.days[ds]&&stats.days[ds].count)||0,cap=capOf(ds),lc=cap<stats.maxLeave?' lc':'';
     if(mine.has(ds))return '<div class="day me" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">🐾</span></div>';
     if(closed(ds))return '<div class="day closed'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">'+((OPENFROM&&ds<OPENFROM)?'已排完':'未開放')+'</span></div>';
     if(isFull(ds))return '<div class="day full'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">已滿'+cap+'人</span></div>';
-    return '<div class="day'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">'+c+'/'+cap+'</span></div>';
+    return '<div class="day'+wc+lc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">'+c+'/'+cap+'</span></div>';
   }
   for(var d=1;d<=dim;d++)h+=cell(month+'-'+String(d).padStart(2,'0'),d);
   if(OPENTO){
@@ -203,7 +204,7 @@ function renderCal(){
       }
     }
   }
-  h+='</div><div class="hint">🐾為你的休假；「已滿」點一下可查看名單；半透明日期無法選擇。</div><div class="err" id="err"></div></section>';
+  h+='</div><div class="hint">🐾為你的休假；淺橘色日期名額較少；「已滿」點一下可查看名單；半透明日期無法選擇。</div><div class="err" id="err"></div></section>';
   v.innerHTML=h;
   var su=document.getElementById('switchuser');if(su)su.onclick=function(){me=null;done=false;render();};
   v.querySelectorAll('.day[data-ds]').forEach(function(el){
