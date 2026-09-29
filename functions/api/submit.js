@@ -9,8 +9,8 @@ function weekKey(ds) {
 }
 
 // POST /api/submit { name, month, leave: ["YYYY-MM-DD", ...] }
-// 強制執行兩條規則：每天上限人數（豁免人員不計）、每人每週最多天數。
-// 回傳 { ok, accepted, rejected, rejectedWeekly, maxLeave, weeklyCap }。
+// 強制執行三條規則：開放起始日、每天上限人數（豁免人員不計）、每人每週最多天數。
+// 回傳 { ok, accepted, rejected, rejectedWeekly, rejectedClosed, maxLeave, weeklyCap }。
 export async function onRequestPost({ request, env }) {
   let body;
   try { body = await request.json(); } catch { return Response.json({ error: 'bad json' }, { status: 400 }); }
@@ -23,7 +23,11 @@ export async function onRequestPost({ request, env }) {
   const cap = cfg.maxLeave;
   const raw = Array.isArray(body.leave) ? body.leave : [];
   const picked = raw.filter(isValidDate);
-  const dates = [...new Set(picked)].sort();
+  const all = [...new Set(picked)].sort();
+  // 未開放的日期（開放起始日之前，多半是已經排完的）：直接退回，不計入任何規則
+  const openFrom = cfg.openFrom || '';
+  const rejectedClosed = openFrom ? all.filter(d => d < openFrom) : [];
+  const dates = openFrom ? all.filter(d => d >= openFrom) : all;
 
   function isValidDate(d) {
     return typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && d.startsWith(month);
@@ -60,5 +64,5 @@ export async function onRequestPost({ request, env }) {
      ON CONFLICT(name, month) DO UPDATE SET leave_dates = excluded.leave_dates, updated_at = datetime('now')`
   ).bind(name, month, JSON.stringify(accepted)).run();
 
-  return Response.json({ ok: true, accepted, rejected, rejectedWeekly, maxLeave: cap, weeklyCap: cfg.weeklyCap });
+  return Response.json({ ok: true, accepted, rejected, rejectedWeekly, rejectedClosed, maxLeave: cap, weeklyCap: cfg.weeklyCap });
 }

@@ -31,6 +31,9 @@ h2{font-size:15px;margin-bottom:10px}
 .day.full{background:#f0f0f0;border-color:#ddd;cursor:not-allowed}
 .day.full .n{color:#aaa}
 .day.full .c{color:#e5484d;font-weight:700}
+.day.closed{opacity:.25;background:#f5f5f5;cursor:not-allowed}
+.day.closed .n{color:#bbb}
+.day.closed .c{color:#bbb}
 .day.blank{background:transparent;border:none;cursor:default}
 .bar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #ddd;padding:10px 14px calc(10px + env(safe-area-inset-bottom))}
 .bar button{width:100%;padding:14px;border:none;border-radius:12px;background:#06C755;color:#fff;font-size:17px;font-weight:700;cursor:pointer}
@@ -53,6 +56,7 @@ h2{font-size:15px;margin-bottom:10px}
 var STAFF=['榮德','耀南','淑玲','泰霖','蓬逸','建發','敏誠','瑜芳','宜萱','俊霖'];
 var EXEMPT=['榮德','俊霖'];
 var WEEKLY=2;
+var OPENFROM='';
 function weekKey(ds){var p=ds.split('-');var dt=new Date(Date.UTC(+p[0],+p[1]-1,+p[2]));dt.setUTCDate(dt.getUTCDate()-((dt.getUTCDay()+6)%7));return dt.toISOString().slice(0,10);}
 function exemptNote(){return EXEMPT.length?'（'+EXEMPT.join('、')+'不佔名額）':'';}
 function weekCount(ds){var w=weekKey(ds),c=0;mine.forEach(function(x){if(weekKey(x)===w)c++;});return c;}
@@ -80,7 +84,8 @@ function render(){
   if(!me){renderNames(v);bar.innerHTML='<button id="go" disabled>請先選名字</button>';stopPoll();return;}
   if(done){renderDone(v);bar.innerHTML='<button id="go2" class="ghost" style="width:100%;padding:14px;border-radius:12px;background:#fff;color:#06C755;border:1.5px solid #06C755;font-size:17px;font-weight:700;cursor:pointer">修改我的休假</button>';document.getElementById('go2').onclick=function(){done=false;render();};stopPoll();return;}
   renderCal(v);
-  bar.innerHTML='<button id="go">確定送出（已選 '+mine.size+' 天）</button><div class="hint" style="text-align:center">每天最多 '+stats.maxLeave+' 人休假'+exemptNote()+'，每週每人最多先排 '+WEEKLY+' 天，滿了的日期不能選</div>';
+  var on=OPENFROM?('，'+parseInt(OPENFROM.slice(5,7),10)+'/'+parseInt(OPENFROM.slice(8),10)+' 起開放選擇'):'';
+  bar.innerHTML='<button id="go">確定送出（已選 '+mine.size+' 天）</button><div class="hint" style="text-align:center">每天最多 '+stats.maxLeave+' 人休假'+exemptNote()+'，每週每人最多先排 '+WEEKLY+' 天'+on+'，滿了的日期不能選</div>';
   document.getElementById('go').onclick=submit;
   startPoll();
 }
@@ -104,6 +109,7 @@ function renderCal(){
     var w=new Date(y,m-1,d).getDay(),wc=w===0?' sun':(w===6?' we':'');
     var c=(stats.days[ds]&&stats.days[ds].count)||0;
     if(mine.has(ds)){h+='<div class="day me" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">我的休假</span></div>';}
+    else if(OPENFROM&&ds<OPENFROM){h+='<div class="day closed'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">已排完</span></div>';}
     else if(isFull(ds)){h+='<div class="day full'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">已滿'+stats.maxLeave+'人</span></div>';}
     else{h+='<div class="day'+wc+'" data-ds="'+ds+'"><span class="n">'+d+'</span><span class="c">'+c+'/'+stats.maxLeave+'</span></div>';}
   }
@@ -112,7 +118,7 @@ function renderCal(){
   v.querySelectorAll('.day[data-ds]').forEach(function(el){
     el.onclick=function(){
       var ds=el.getAttribute('data-ds');
-      if(el.classList.contains('full'))return;
+      if(el.classList.contains('full')||el.classList.contains('closed'))return;
       if(mine.has(ds)){mine.delete(ds);}
       else{
         if(weekCount(ds)>=WEEKLY){
@@ -147,6 +153,10 @@ async function submit(){
       r.rejectedWeekly.forEach(function(ds){mine.delete(ds);});
       msg+='每週最多先排 '+(r.weeklyCap||WEEKLY)+' 天，以下日期超過上限被退回：'+dayName(r.rejectedWeekly)+'。';
     }
+    if(r.rejectedClosed&&r.rejectedClosed.length){
+      r.rejectedClosed.forEach(function(ds){mine.delete(ds);});
+      msg+='以下日期之前已排完、不開放選擇：'+dayName(r.rejectedClosed)+'。';
+    }
     if(msg){
       renderCal();
       document.getElementById('err').textContent=msg;
@@ -164,6 +174,7 @@ async function boot(){
     if(c.staff&&c.staff.length)STAFF=c.staff;
     if(c.exempt)EXEMPT=c.exempt;
     if(c.weeklyCap)WEEKLY=c.weeklyCap;
+    if(c.openFrom!==undefined)OPENFROM=c.openFrom||'';
   }catch(e){}
   render();fetchStats();
 }

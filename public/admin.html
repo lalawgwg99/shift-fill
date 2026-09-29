@@ -14,7 +14,7 @@ section{background:#fff;margin:10px 12px;border-radius:12px;padding:14px}
 h2{font-size:15px;margin-bottom:10px}
 label{display:block;font-size:14px;font-weight:700;margin:14px 0 6px}
 label small{font-weight:400;color:#888}
-input[type=number],input[type=password],textarea{width:100%;border:1.5px solid #ddd;border-radius:10px;padding:12px;font-size:16px;font-family:inherit}
+input[type=number],input[type=password],input[type=date],textarea{width:100%;border:1.5px solid #ddd;border-radius:10px;padding:12px;font-size:16px;font-family:inherit}
 textarea{min-height:150px;line-height:1.8;resize:vertical}
 .num{max-width:140px}
 .exlist{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
@@ -107,6 +107,9 @@ function renderForm(v){
     +'<label>每週每人最多先排天數 <small>（目前 '+cfg.weeklyCap+' 天，可調）</small></label>'
     +'<input type="number" class="num" id="f_weekly" min="1" max="7" value="'+cfg.weeklyCap+'"/>'
     +'<div class="hint">第一輪每人每週最多排上面這個天數；之後要開放更多天，直接把數字調大即可。</div>'
+    +'<label>開放選擇起始日 <small>（此日期之前的日期會變透明、不能選；空白=不限制）</small></label>'
+    +'<input type="date" id="f_openfrom" style="max-width:190px" value="'+(cfg.openFrom||'')+'"/>'
+    +'<div class="hint">例如 10/1–10/4 已經排完，就設為 2026-10-05。換月份調查時記得回來更新。</div>'
     +'</section>'
     +'<section><h2>人員</h2>'
     +'<label>員工名單 <small>（一人一行，順序就是填寫頁的顯示順序）</small></label>'
@@ -152,11 +155,13 @@ function renderForm(v){
     var staff=document.getElementById('f_staff').value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
     var exChecked=[];document.querySelectorAll('#exlist input:checked').forEach(function(c){exChecked.push(c.value);});
     var newpw=document.getElementById('f_newpw').value;
+    var openfrom=document.getElementById('f_openfrom').value;
     if(!(cap>=1&&cap<=20)){m.textContent='每天人數請填 1～20';return;}
     if(!(weekly>=1&&weekly<=7)){m.textContent='每週天數請填 1～7';return;}
+    if(openfrom&&!/^\d{4}-\d{2}-\d{2}$/.test(openfrom)){m.textContent='起始日格式錯誤';return;}
     if(!staff.length){m.textContent='員工名單不能空白';return;}
     if(newpw&&newpw.length<4){m.textContent='新密碼至少 4 碼';return;}
-    var payload={token:token,maxLeave:cap,weeklyCap:weekly,staff:staff,exempt:exChecked};
+    var payload={token:token,maxLeave:cap,weeklyCap:weekly,openFrom:openfrom,staff:staff,exempt:exChecked};
     if(newpw)payload.newToken=newpw;
     var btn=document.getElementById('save');btn.disabled=true;btn.textContent='儲存中…';
     var r=await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});

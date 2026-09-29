@@ -4,6 +4,7 @@
 // 可調設定（存在 D1 config 表，管理頁可改，不用改程式）：
 //   maxLeave  每天最多休假人數（預設 4）
 //   weeklyCap 每人每週最多休假天數（預設 2，先排兩天）
+//   openFrom  開放選擇起始日 YYYY-MM-DD（此日期之前的日期變透明、不能選；空白=不限制）
 //   staff     員工名單（陣列）
 //   exempt    不佔每日名額的人員（陣列，須為 staff 子集）
 //   adminToken 管理密碼（永不經由 GET 回傳）
@@ -60,6 +61,7 @@ export async function getConfig(env) {
   const cfg = {
     maxLeave: parseCap(env.MAX_LEAVE, 4, 1, 20),
     weeklyCap: parseCap(env.WEEKLY_CAP, 2, 1, 7),
+    openFrom: '',
     staff: [...DEFAULT_STAFF],
     exempt: [...DEFAULT_EXEMPT]
   };
@@ -68,6 +70,7 @@ export async function getConfig(env) {
     for (const r of (rows.results || [])) {
       if (r.key === 'maxLeave') cfg.maxLeave = parseCap(r.value, cfg.maxLeave, 1, 20);
       else if (r.key === 'weeklyCap') cfg.weeklyCap = parseCap(r.value, cfg.weeklyCap, 1, 7);
+      else if (r.key === 'openFrom') cfg.openFrom = String(r.value || '');
       else if (r.key === 'staff') { const a = parseStoredNameList(r.value); if (a.length) cfg.staff = a; }
       else if (r.key === 'exempt') cfg.exempt = parseStoredNameList(r.value).filter(n => cfg.staff.includes(n));
     }
@@ -89,7 +92,7 @@ async function setConfigValue(env, key, value) {
 }
 
 function publicConfig(cfg, hasAdminToken) {
-  return { maxLeave: cfg.maxLeave, weeklyCap: cfg.weeklyCap, staff: cfg.staff, exempt: cfg.exempt, hasAdminToken };
+  return { maxLeave: cfg.maxLeave, weeklyCap: cfg.weeklyCap, openFrom: cfg.openFrom, staff: cfg.staff, exempt: cfg.exempt, hasAdminToken };
 }
 
 // GET /api/config -> { maxLeave, weeklyCap, staff, exempt, hasAdminToken }
@@ -101,7 +104,7 @@ export async function onRequestGet({ env }) {
   return Response.json(publicConfig(cfg, !!token));
 }
 
-// POST /api/config { token?, newToken?, maxLeave?, weeklyCap?, staff?, exempt? }
+// POST /api/config { token?, newToken?, maxLeave?, weeklyCap?, openFrom?, staff?, exempt? }
 // 第一次使用（還沒設密碼）：帶 newToken（至少 4 碼）即完成初次設定，可同時帶其他設定。
 // 之後：需帶正確 token；帶 newToken 可順便換密碼。
 export async function onRequestPost({ request, env }) {
@@ -131,6 +134,11 @@ export async function onRequestPost({ request, env }) {
     const n = parseInt(body.weeklyCap, 10);
     if (!(n >= 1 && n <= 7)) return Response.json({ error: 'bad weeklyCap' }, { status: 400 });
     await setConfigValue(env, 'weeklyCap', String(n));
+  }
+  if (body.openFrom !== undefined) {
+    const v = String(body.openFrom || '').trim();
+    if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return Response.json({ error: 'bad openFrom' }, { status: 400 });
+    await setConfigValue(env, 'openFrom', v);
   }
   let staff = null;
   if (body.staff !== undefined) {
