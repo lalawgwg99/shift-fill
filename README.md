@@ -5,15 +5,16 @@
 
 - 前端：`public/index.html`（手機優先，LINE 式月曆點選）
 - API：`functions/api/`（Cloudflare Pages Functions + D1）
-  - `GET /api/stats?month=YYYY-MM`：每天休假人數與名單
+  - `GET /api/stats?month=YYYY-MM`：每天休假人數與名單（附單日自訂上限）
+  - `GET /api/caps?month=YYYY-MM`：查詢單日自訂上限；`POST /api/caps`：設定／清除（需管理密碼）
   - `GET /api/mine?name=XX&month=YYYY-MM`：某人已送出的休假
   - `POST /api/submit`：送出／更新休假（需個人 4 位數密碼；伺服器端檢查每天上限與每週上限，超過的日期會被退回）
   - `GET /api/pin?name=XX`：查詢某人是否已設密碼；`POST /api/pin`：初次設定或驗證 4 位數密碼
   - `GET /api/export?month=YYYY-MM`：匯出全月資料（給排班 App 同步用）
   - `GET /api/config`：目前設定（上限、每週天數、名單、豁免）
   - `POST /api/config`：修改設定（需管理密碼）
-- 排班設定頁：`public/admin.html`（手機可開，設管理密碼後可調：每天上限、每週每人天數、員工名單、不佔名額人員）
-- 資料庫：`migrations/0001_schema.sql`（API 首次被呼叫會自動建表，也可手動跑）
+- 排班設定頁：`public/admin.html`（手機可開，設管理密碼後可調：每天上限、每週每人天數、員工名單、不佔名額人員、**單日人數上限**）
+- 資料庫：`migrations/0001_schema.sql`、`migrations/0002_day_caps.sql`（API 首次被呼叫會自動建表，也可手動跑）
 
 ## 上線步驟（Cloudflare，跟 musegogo 一樣）
 
@@ -50,6 +51,7 @@
 - 後台可一鍵匯出 Excel（每人明細＋每日統計兩個工作表，真正的 .xlsx）
 - 後台「危險區」可一鍵清空指定月份的排假（個人密碼不受影響，需二次確認）
 - 個人密碼管理：查看誰已設定 4 位數密碼，有人忘記時可幫他重設
+- 單日人數上限：某些日子想限制更少人休假（例如只准 2～3 人），在設定頁「單日人數上限」點該日期切換（預設 → 3 → 2 → 1 → 預設），橘色為自訂日期，立即生效
 
 設定存在資料庫，改完立刻生效，不用重新部署。
 
