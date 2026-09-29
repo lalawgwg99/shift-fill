@@ -94,6 +94,12 @@ export async function getAdminToken(env) {
   } catch { return null; }
 }
 
+export async function verifyAdmin(env, token) {
+  const cur = await getAdminToken(env);
+  if (!cur) return false;
+  return (await sha256hex(String(token || ''))) === cur;
+}
+
 async function setConfigValue(env, key, value) {
   await env.DB.prepare(
     'INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'

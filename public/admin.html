@@ -121,6 +121,7 @@ function renderForm(v){
     +'<div style="display:flex;gap:8px;align-items:center">'
     +'<input type="month" id="v_month" style="max-width:170px" value="'+schedMonth+'"/>'
     +'<button class="ghostbtn" id="v_reload" style="width:auto;margin-top:0;padding:10px 18px">重新整理</button>'
+    +'<button class="ghostbtn" id="v_xlsx" style="width:auto;margin-top:0;padding:10px 18px">匯出 Excel</button>'
     +'</div>'
     +'<div class="hint">每人「最長未休」超過 7 天會標紅（7 天內至少要有 1 天休假）。</div>'
     +'<div id="sched" style="margin-top:6px"><div class="hint">讀取中…</div></div>'
@@ -151,6 +152,12 @@ function renderForm(v){
     +'<div class="err" id="msg"></div><div class="okmsg" id="okmsg"></div>'
     +'<button class="bigbtn" id="save">儲存設定</button>'
     +'<button class="ghostbtn" id="logout">登出</button>'
+    +'</section>'
+    +'<section><h2 style="color:#c0392b">危險區</h2>'
+    +'<label>清空排假月份</label>'
+    +'<input type="month" id="f_clearmonth" style="max-width:170px" value="'+schedMonth+'"/>'
+    +'<div class="hint">只刪除該月的排假資料，個人 4 位數密碼不受影響。此動作無法復原。</div>'
+    +'<button class="ghostbtn" id="clear" style="color:#c0392b;border-color:#c0392b">清空該月排假</button>'
     +'</section>';
   v.innerHTML=h;
   var loadSched=async function(){
@@ -204,6 +211,32 @@ function renderForm(v){
   };
   document.getElementById('v_reload').onclick=loadSched;
   loadSched();
+  document.getElementById('v_xlsx').onclick=async function(){
+    var m=document.getElementById('v_month').value;
+    if(!/^\d{4}-\d{2}$/.test(m)){alert('月份格式錯誤');return;}
+    var btn=this;btn.disabled=true;btn.textContent='匯出中…';
+    try{
+      var r=await fetch('/api/export-xlsx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token,month:m})});
+      if(r.status!==200){var j=null;try{j=await r.json();}catch(e){}alert('匯出失敗：'+((j&&j.error)||r.status));return;}
+      var blob=await r.blob();
+      var a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download='排假-'+m+'.xlsx';
+      document.body.appendChild(a);a.click();
+      setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1500);
+    }catch(e){alert('匯出失敗，請檢查網路');}
+    btn.disabled=false;btn.textContent='匯出 Excel';
+  };
+  document.getElementById('clear').onclick=async function(){
+    var m=document.getElementById('f_clearmonth').value;
+    if(!/^\d{4}-\d{2}$/.test(m)){alert('月份格式錯誤');return;}
+    if(!confirm('確定清空 '+m+' 的全部排假資料嗎？\n此動作無法復原（個人密碼不受影響）。'))return;
+    if(!confirm('再次確認：真的要刪除 '+m+' 的所有排假？'))return;
+    var r=await api('/api/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token,month:m})});
+    if(r.status===200&&r.body&&r.body.ok){alert('已清空 '+m+'，共刪除 '+r.body.deleted+' 筆排假');loadSched();}
+    else if(r.status===403){alert('管理密碼錯誤或已失效，請重新登入');}
+    else{alert('清空失敗，請檢查網路後再試');}
+  };
   var buildEx=function(){
     var names=document.getElementById('f_staff').value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
     var checked={};
