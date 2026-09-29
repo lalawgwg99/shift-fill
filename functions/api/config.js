@@ -25,7 +25,8 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_submissions_month ON submissions(month)`,
   `CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS pins (name TEXT PRIMARY KEY, pin_hash TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  `CREATE TABLE IF NOT EXISTS pin_fails (name TEXT PRIMARY KEY, fails INTEGER NOT NULL DEFAULT 0, last_fail TEXT NOT NULL DEFAULT (datetime('now')))`
+  `CREATE TABLE IF NOT EXISTS pin_fails (name TEXT PRIMARY KEY, fails INTEGER NOT NULL DEFAULT 0, last_fail TEXT NOT NULL DEFAULT (datetime('now')))`,
+  `CREATE TABLE IF NOT EXISTS day_caps (day TEXT PRIMARY KEY, cap INTEGER NOT NULL)` // 單日自訂休假人數上限（無資料=用預設 maxLeave）
 ];
 
 // 資料表自動建置：第一次被呼叫時若表不存在就自己建好，
