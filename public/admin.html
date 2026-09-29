@@ -299,6 +299,7 @@ function renderForm(v){
   var buildEx=function(){
     var names=document.getElementById('f_staff').value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
     var checked={};
+    var hadInputs=document.querySelectorAll('#exlist input').length>0;
     document.querySelectorAll('#exlist input:checked').forEach(function(c){checked[c.value]=1;});
     var box=document.getElementById('exlist');
     box.innerHTML='';
@@ -306,7 +307,7 @@ function renderForm(v){
       var lab=document.createElement('label');
       var cb=document.createElement('input');
       cb.type='checkbox';cb.value=n;
-      if(checked[n]||(!document.querySelectorAll('#exlist input').length&&cfg.exempt.indexOf(n)>=0))cb.checked=true;
+      if(checked[n]||(!hadInputs&&cfg.exempt.indexOf(n)>=0))cb.checked=true;
       cb.onchange=function(){lab.classList.toggle('on',cb.checked);};
       lab.appendChild(cb);lab.appendChild(document.createTextNode(n));
       if(cb.checked)lab.classList.add('on');
