@@ -69,7 +69,7 @@ var EXEMPT=['榮德','俊霖'];
 var WEEKLY=2;
 var OPENFROM='',OPENTO='';
 function weekKey(ds){var p=ds.split('-');var dt=new Date(Date.UTC(+p[0],+p[1]-1,+p[2]));dt.setUTCDate(dt.getUTCDate()-((dt.getUTCDay()+6)%7));return dt.toISOString().slice(0,10);}
-function exemptNote(){return EXEMPT.length?'（'+EXEMPT.join('、')+'不佔名額）':'';}
+function exemptNote(){return '';}
 function weekCount(ds){var w=weekKey(ds),c=0;mine.forEach(function(x){if(weekKey(x)===w)c++;});return c;}
 function dayName(a){return a.map(function(ds){return parseInt(ds.slice(8),10)+'號';}).join('、');}
 var WD=['日','一','二','三','四','五','六'];
@@ -98,20 +98,20 @@ function render(){
   renderCal(v);
   function fmtD(ds){return parseInt(ds.slice(5,7),10)+'/'+parseInt(ds.slice(8),10);}
   var on=OPENFROM&&OPENTO?('，'+fmtD(OPENFROM)+'–'+fmtD(OPENTO)+' 開放選擇'):OPENFROM?('，'+fmtD(OPENFROM)+' 起開放選擇'):OPENTO?('，開放至 '+fmtD(OPENTO)):'';
-  bar.innerHTML='<button id="go">確定送出（已選 '+mine.size+' 天）</button><div class="hint" style="text-align:center">每天最多 '+stats.maxLeave+' 人休假'+exemptNote()+'，每週每人最多先排 '+WEEKLY+' 天'+on+'，滿了的日期不能選</div>';
+  bar.innerHTML='<button id="go">確定送出（已選 '+mine.size+' 天）</button><div class="hint" style="text-align:center">每日上限 '+stats.maxLeave+' 人，每週每人上限 '+WEEKLY+' 天'+on+'</div>';
   document.getElementById('go').onclick=submit;
   startPoll();
 }
 function renderNames(v){
-  var h='<section><h2>我是誰？（點自己的名字）</h2><div class="names">';
+  var h='<section><h2>請選擇姓名</h2><div class="names">';
   STAFF.forEach(function(n){h+='<button data-n="'+n+'">'+n+'</button>';});
   h+='</div></section>';
-  h+='<section><div class="hint">點名字 → 點日期選休假 → 確定送出。<br>第一次點名字要設 4 位數密碼，之後每次都要輸入，別人不能冒用你的名字亂排。<br>每天最多 '+stats.maxLeave+' 人休假'+exemptNote()+'，每週每人最多先排 '+WEEKLY+' 天，人數即時顯示，滿了就不能選。</div></section>';
+  h+='<section><div class="hint">選擇姓名 → 點選日期 → 確定送出。<br>首次使用請設定 4 位數密碼。<br>每日上限 '+stats.maxLeave+' 人，每週每人上限 '+WEEKLY+' 天。</div></section>';
   v.innerHTML=h;
   v.querySelectorAll('.names button').forEach(function(b){b.onclick=function(){pickName(b.getAttribute('data-n'));};});
 }
 
-// 選名字後先過 4 位數密碼：沒設過→設定；設過→驗證（記住在這台裝置）
+// 4 位數密碼驗證
 async function pickName(n){
   me=n;done=false;
   var hasPin=false;
@@ -129,9 +129,9 @@ function renderPin(n,hasPin,msg){
   var v=document.getElementById('view');
   var h='<section><h2>'+n+'，你好</h2>';
   if(hasPin){
-    h+='<div class="hint">請輸入你的 4 位數密碼（避免別人冒用你的名字亂排）。</div><label class="pinlabel">4 位數密碼</label>';
+    h+='<div class="hint">請輸入 4 位數密碼。</div><label class="pinlabel">4 位數密碼</label>';
   }else{
-    h+='<div class="hint">第一次使用，請設定一組 4 位數密碼。之後每次進來都要輸入，別人就不能冒用你的名字亂排了。</div><label class="pinlabel">設定 4 位數密碼</label>';
+    h+='<div class="hint">請設定 4 位數密碼。</div><label class="pinlabel">設定 4 位數密碼</label>';
   }
   h+='<input type="password" class="pin" id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••"/>';
   h+='<div class="err" id="msg">'+(msg||'')+'</div>';
@@ -174,7 +174,7 @@ function renderCal(){
   var v=document.getElementById('view');
   var p=month.split('-'),y=+p[0],m=+p[1];
   var first=new Date(y,m-1,1).getDay(),dim=new Date(y,m,0).getDate();
-  var h='<section><h2 style="display:flex;justify-content:space-between;align-items:center"><span>'+me+'，點日期選休假'+(EXEMPT.indexOf(me)>=0?'（排班人員不受名額限制）':'（再點一次取消）')+'</span><button id="switchuser" style="border:1.5px solid #ddd;background:#fff;border-radius:20px;padding:6px 14px;font-size:13px;color:#666;cursor:pointer;white-space:nowrap">換人</button></h2><div class="cal">';
+  var h='<section><h2 style="display:flex;justify-content:space-between;align-items:center"><span>'+me+'，點日期選休假'+(EXEMPT.indexOf(me)>=0?'':'（再點一次取消）')+'</span><button id="switchuser" style="border:1.5px solid #ddd;background:#fff;border-radius:20px;padding:6px 14px;font-size:13px;color:#666;cursor:pointer;white-space:nowrap">換人</button></h2><div class="cal">';
   WD.forEach(function(w,i){h+='<div class="dow'+(i===0?' sun':'')+(i===6?' sat':'')+'">'+w+'</div>';});
   for(var i=0;i<first;i++)h+='<div class="day blank"></div>';
   function closed(ds){return (OPENFROM&&ds<OPENFROM)||(OPENTO&&ds>OPENTO);}
@@ -200,7 +200,7 @@ function renderCal(){
       }
     }
   }
-  h+='</div><div class="hint">綠色是你的休假；灰色「已滿」是當天休假已達 '+stats.maxLeave+' 人'+(EXEMPT.length?'（不含'+EXEMPT.join('、')+'）':'')+'，不能再選，點一下可看是誰排。半透明是已排完或未開放的日期。</div><div class="err" id="err"></div></section>';
+  h+='</div><div class="hint">綠色為你的休假；「已滿」點一下可查看名單；半透明日期無法選擇。</div><div class="err" id="err"></div></section>';
   v.innerHTML=h;
   var su=document.getElementById('switchuser');if(su)su.onclick=function(){me=null;done=false;render();};
   v.querySelectorAll('.day[data-ds]').forEach(function(el){
@@ -212,7 +212,7 @@ function renderCal(){
       else{
         if(weekCount(ds)>=WEEKLY){
           var e=document.getElementById('err');
-          if(e)e.textContent='每週最多先排 '+WEEKLY+' 天，這一週已經選滿了，請改選別週的日期';
+          if(e)e.textContent='本週已達 '+WEEKLY+' 天上限，請改選其他週';
           return;
         }
         mine.add(ds);
@@ -226,7 +226,7 @@ function renderDone(v){
   var arr=[...mine].sort();
   var h='<section><div class="ok"><div class="big">✓</div><p><b>'+me+'</b>，你選了 <b>'+arr.length+'</b> 天休假：</p><div>';
   arr.forEach(function(ds){h+='<span class="tag">'+parseInt(ds.slice(8),10)+'號</span>';});
-  h+='</div><div class="hint">如果有人異動，數字會即時更新。<br>要改的話按下方「修改我的休假」。</div></div></section>';
+  h+='</div><div class="hint">如需修改請按「修改我的休假」。</div></div></section>';
   v.innerHTML=h;
 }
 async function submit(){
@@ -236,15 +236,15 @@ async function submit(){
     var msg='';
     if(r.rejected&&r.rejected.length){
       r.rejected.forEach(function(ds){mine.delete(ds);});
-      msg+='以下日期剛被別人選滿（'+r.maxLeave+'人），請改選其他日期：'+dayName(r.rejected)+'。';
+      msg+='以下日期已被選滿，請改選其他日期：'+dayName(r.rejected)+'。';
     }
     if(r.rejectedWeekly&&r.rejectedWeekly.length){
       r.rejectedWeekly.forEach(function(ds){mine.delete(ds);});
-      msg+='每週最多先排 '+(r.weeklyCap||WEEKLY)+' 天，以下日期超過上限被退回：'+dayName(r.rejectedWeekly)+'。';
+      msg+='以下日期超過每週 '+(r.weeklyCap||WEEKLY)+' 天上限：'+dayName(r.rejectedWeekly)+'。';
     }
     if(r.rejectedClosed&&r.rejectedClosed.length){
       r.rejectedClosed.forEach(function(ds){mine.delete(ds);});
-      msg+='以下日期之前已排完、不開放選擇：'+dayName(r.rejectedClosed)+'。';
+      msg+='以下日期不開放選擇：'+dayName(r.rejectedClosed)+'。';
     }
     if(msg){
       renderCal();

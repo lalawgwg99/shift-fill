@@ -75,7 +75,7 @@ function render(){
 
 function renderSetup(v){
   v.innerHTML='<section><h2>初次設定</h2>'
-    +'<div class="hint">第一次使用，請先設定一組管理密碼（至少 4 碼）。之後修改設定都要輸入這組密碼，員工不會看到這一頁。</div>'
+    +'<div class="hint">請設定管理密碼（至少 4 碼）。</div>'
     +'<label>管理密碼</label><input type="password" id="pw1" inputmode="numeric" placeholder="至少 4 碼"/>'
     +'<label>再輸入一次</label><input type="password" id="pw2" inputmode="numeric" placeholder="確認密碼"/>'
     +'<div class="err" id="msg"></div>'
@@ -95,7 +95,7 @@ function renderSetup(v){
 
 function renderLock(v,err){
   v.innerHTML='<section><h2>管理員登入</h2>'
-    +'<div class="hint">請輸入管理密碼才能修改排班設定。</div>'
+    +'<div class="hint">請輸入管理密碼。</div>'
     +'<label>管理密碼</label><input type="password" id="pw" inputmode="numeric" placeholder="管理密碼"/>'
     +'<div class="err" id="msg">'+(err||'')+'</div>'
     +'<button class="bigbtn" id="ok">登入</button></section>';
@@ -123,31 +123,29 @@ function renderForm(v){
     +'<button class="ghostbtn" id="v_reload" style="width:auto;margin-top:0;padding:10px 18px">重新整理</button>'
     +'<button class="ghostbtn" id="v_xlsx" style="width:auto;margin-top:0;padding:10px 18px">匯出 Excel</button>'
     +'</div>'
-    +'<div class="hint">每人「最長未休」超過 7 天會標紅（7 天內至少要有 1 天休假）。</div>'
+    +'<div class="hint">「最長未休」超過 7 天會以紅色標示。</div>'
     +'<div id="sched" style="margin-top:6px"><div class="hint">讀取中…</div></div>'
     +'</section>'
     +'<section><h2>休假規則</h2>'
-    +'<label>每天最多休假人數 <small>（目前 '+cfg.maxLeave+' 人）</small></label>'
+    +'<label>每日休假人數上限</label>'
     +'<input type="number" class="num" id="f_cap" min="1" max="20" value="'+cfg.maxLeave+'"/>'
-    +'<label>每週每人最多先排天數 <small>（目前 '+cfg.weeklyCap+' 天，可調）</small></label>'
+    +'<label>每週每人休假天數上限</label>'
     +'<input type="number" class="num" id="f_weekly" min="1" max="7" value="'+cfg.weeklyCap+'"/>'
-    +'<div class="hint">第一輪每人每週最多排上面這個天數；之後要開放更多天，直接把數字調大即可。</div>'
-    +'<label>開放選擇起始日 <small>（此日期之前的日期會變透明、不能選；空白=不限制）</small></label>'
+    +'<label>開放起始日 <small>（留空表示不限制）</small></label>'
     +'<input type="date" id="f_openfrom" style="max-width:190px" value="'+(cfg.openFrom||'')+'"/>'
-    +'<label>開放選擇結束日 <small>（此日期之後的日期會變透明、不能選；空白=不限制）</small></label>'
+    +'<label>開放結束日 <small>（留空表示不限制）</small></label>'
     +'<input type="date" id="f_opento" style="max-width:190px" value="'+(cfg.openTo||'')+'"/>'
-    +'<div class="hint">例如 10/1–10/4 已經排完，就設為 2026-10-05。換月份調查時記得回來更新。</div>'
     +'</section>'
     +'<section><h2>人員</h2>'
-    +'<label>員工名單 <small>（一人一行，順序就是填寫頁的顯示順序）</small></label>'
+    +'<label>員工名單 <small>（一人一行）</small></label>'
     +'<textarea id="f_staff">'+esc(staffTxt)+'</textarea>'
-    +'<label>不佔每日名額的人員 <small>（打勾；通常是排班人員）</small></label>'
+    +'<label>不佔名額人員</label>'
     +'<div class="exlist" id="exlist"></div>'
-    +'<label>個人密碼管理 <small>（有人忘記 4 位數密碼時幫他重設；重設後他下次進來要重新設定一組）</small></label>'
+    +'<label>重設個人密碼 <small>（重設後需重新設定）</small></label>'
     +'<div id="pinlist"><div class="hint">讀取中…</div></div>'
     +'</section>'
     +'<section><h2>管理密碼</h2>'
-    +'<label>更換密碼 <small>（不換就留空）</small></label>'
+    +'<label>新密碼 <small>（留空表示不更換）</small></label>'
     +'<input type="password" id="f_newpw" inputmode="numeric" placeholder="新密碼（至少 4 碼）"/>'
     +'<div class="err" id="msg"></div><div class="okmsg" id="okmsg"></div>'
     +'<button class="bigbtn" id="save">儲存設定</button>'
@@ -156,7 +154,7 @@ function renderForm(v){
     +'<section><h2 style="color:#c0392b">危險區</h2>'
     +'<label>清空排假月份</label>'
     +'<input type="month" id="f_clearmonth" style="max-width:170px" value="'+schedMonth+'"/>'
-    +'<div class="hint">只刪除該月的排假資料，個人 4 位數密碼不受影響。此動作無法復原。</div>'
+    +'<div class="hint">僅刪除該月排假資料（保留個人密碼），無法復原。</div>'
     +'<button class="ghostbtn" id="clear" style="color:#c0392b;border-color:#c0392b">清空該月排假</button>'
     +'</section>';
   v.innerHTML=h;
@@ -230,8 +228,8 @@ function renderForm(v){
   document.getElementById('clear').onclick=async function(){
     var m=document.getElementById('f_clearmonth').value;
     if(!/^\d{4}-\d{2}$/.test(m)){alert('月份格式錯誤');return;}
-    if(!confirm('確定清空 '+m+' 的全部排假資料嗎？\n此動作無法復原（個人密碼不受影響）。'))return;
-    if(!confirm('再次確認：真的要刪除 '+m+' 的所有排假？'))return;
+    if(!confirm('確定清空 '+m+' 的排假資料？此動作無法復原。'))return;
+    if(!confirm('再次確認刪除？'))return;
     var r=await api('/api/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token,month:m})});
     if(r.status===200&&r.body&&r.body.ok){alert('已清空 '+m+'，共刪除 '+r.body.deleted+' 筆排假');loadSched();}
     else if(r.status===403){alert('管理密碼錯誤或已失效，請重新登入');}
