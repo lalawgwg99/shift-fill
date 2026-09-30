@@ -86,7 +86,21 @@ document.getElementById('nm').onclick=function(){shiftMonth(1);};
 
 async function api(p,opt){var r=await fetch(p,opt);if(!r.ok){var e=new Error('net');e.status=r.status;try{e.body=await r.json();}catch(_){e.body=null;}throw e;}return r.json();}
 function savedPin(n){return sessionStorage.getItem('shift_pin_'+n)||'';}
-async function fetchStats(){try{stats=await api('/api/stats?month='+month);if(me&&!done)renderCal();}catch(e){}}
+async function fetchConfig(){
+  try{
+    var c=await api('/api/config');
+    if(c.staff&&c.staff.length)STAFF=c.staff;
+    if(c.exempt)EXEMPT=c.exempt;
+    if(c.weeklyCap)WEEKLY=c.weeklyCap;
+    if(c.openFrom!==undefined)OPENFROM=c.openFrom||'';
+    if(c.openTo!==undefined)OPENTO=c.openTo||'';
+  }catch(e){}
+}
+async function fetchStats(){
+  try{stats=await api('/api/stats?month='+month);}catch(e){return;}
+  await fetchConfig();
+  if(me&&!done)renderCal();
+}
 async function fetchMine(){try{var r=await api('/api/mine?name='+encodeURIComponent(me)+'&month='+month+'&pin='+encodeURIComponent(savedPin(me)));serverMine=new Set(r.leave||[]);mine=new Set(serverMine);}catch(e){serverMine=new Set();mine=new Set();}}
 
 function others(ds){var c=(stats.days[ds]&&stats.days[ds].count)||0;if(serverMine.has(ds)&&EXEMPT.indexOf(me)<0)c--;return c;}
@@ -165,8 +179,9 @@ function renderPin(n,hasPin,msg){
 }
 function showNames(ds){
   var s=(stats.days[ds]&&stats.days[ds].names)||[];
-  document.getElementById('namespop-title').textContent=parseInt(ds.slice(8),10)+' 號休假（'+s.length+'/'+capOf(ds)+' 人）：';
-  document.getElementById('namespop-list').innerHTML=s.map(function(n){return '<span class="tag">'+n+'</span>';}).join('')||'（無資料）';
+  var c=(stats.days[ds]&&stats.days[ds].count)||0;
+  document.getElementById('namespop-title').textContent=parseInt(ds.slice(8),10)+' 號休假（佔名額 '+c+'/'+capOf(ds)+' 人）：';
+  document.getElementById('namespop-list').innerHTML=s.map(function(n){return '<span class="tag">'+n+(EXEMPT.indexOf(n)>=0?'（不佔）':'')+'</span>';}).join('')||'（無資料）';
   document.getElementById('namespop-bg').style.display='block';
   document.getElementById('namespop').style.display='block';
 }
@@ -273,14 +288,7 @@ function stopPoll(){if(poll){clearInterval(poll);poll=null;}}
 async function boot(){
   document.getElementById('namespop-close').onclick=hideNames;
   document.getElementById('namespop-bg').onclick=hideNames;
-  try{
-    var c=await api('/api/config');
-    if(c.staff&&c.staff.length)STAFF=c.staff;
-    if(c.exempt)EXEMPT=c.exempt;
-    if(c.weeklyCap)WEEKLY=c.weeklyCap;
-    if(c.openFrom!==undefined)OPENFROM=c.openFrom||'';
-    if(c.openTo!==undefined)OPENTO=c.openTo||'';
-  }catch(e){}
+  await fetchConfig();
   render();fetchStats();
 }
 boot();
